@@ -493,10 +493,15 @@ function renderFichas(){
 
   const formHTML=fichaForm!==null?renderFichaForm():"";
 
+  const semFichas = S.fichas.length===0;
   set("p-fichas",`
     <div class="pg-h">
       <div><div class="eyebrow">RECEITAS & ML</div><div class="pg-t">Fichas Técnicas</div></div>
-      <button class="btn bp" onclick="fichaForm={ingredientes:[]};renderFichas()">+ Nova Ficha</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${semFichas?`<button class="btn bg_" onclick="seedCombos()">⬇ Cadastrar combos padrão</button>`:""}
+        <button class="btn bg_" onclick="seedCombos()">↺ Recarregar combos</button>
+        <button class="btn bp" onclick="fichaForm={ingredientes:[]};renderFichas()">+ Nova Ficha</button>
+      </div>
     </div>
     ${formHTML}
     <div class="flt">
@@ -517,8 +522,9 @@ function renderFichas(){
             <td class="r">${mg!==null?chip(P(mg),mg>0.65?"#22c55e":mg>0.50?"#f59e0b":"#ef4444"):"—"}</td>
             <td class="mt" style="font-size:10px">${(f.ingredientes||[]).map(i=>{
               const p=S.produtos.find(x=>x.id===i.produto_id);
-              return p?`${p.nome} ${i.quantidade_ml}ml`:"?";
-            }).join(" · ")||"—"}</td>
+              const label = i.tipo==="mixer"?`5× ${p?p.nome:"?"}`:p?`${p.nome} (garrafa)`:"?";
+              return label;
+            }).join(" + ")||"—"}</td>
             <td style="white-space:nowrap">
               <button class="bi" onclick="fichaForm={...JSON.parse(JSON.stringify(S.fichas.find(x=>x.id==='${f.id}')))};renderFichas()">✏</button>
               <button class="bi" onclick="if(confirm('Excluir?'))FS.del('fichas','${f.id}')">✕</button>
@@ -1420,6 +1426,80 @@ document.addEventListener('change', e => {
       </div>`;
   });
 });
+
+
+async function seedCombos(){
+  if(!db) return;
+  // Check if combos already seeded
+  const existing = await db.collection("fichas").where("origem","==","combo_seed").limit(1).get();
+  if(!existing.empty) { console.log("Combos já cadastrados"); return; }
+
+  const COMBOS = [
+    // ── COMBOS + RED BULL ──────────────────────────────────────────────────────
+    {nome:"Combo Gin Bombay + Red Bull",      cat:"Combos", venda:780,  gin:"Garrafa Bombay 750ml"},
+    {nome:"Combo Star of Bombay + Red Bull",  cat:"Combos", venda:970,  gin:"Garrafa Star Of Bombay 750ml"},
+    {nome:"Combo Hendricks + Red Bull",       cat:"Combos", venda:900,  gin:"Garrafa Hendricks 700ml"},
+    {nome:"Combo Tanqueray Ten + Red Bull",   cat:"Combos", venda:970,  gin:"Garrafa Tanqueray Ten 750ml"},
+    {nome:"Combo Vodka Grey Goose + Red Bull",cat:"Combos", venda:880,  gin:"Grey Goose 750ml"},
+    {nome:"Combo Jack Daniels N7 + Red Bull", cat:"Combos", venda:850,  gin:"Jack Daniel\'s Old N7"},
+    {nome:"Combo JW Black Label + Red Bull",  cat:"Combos", venda:970,  gin:"JW Black Label"},
+    {nome:"Combo JW Gold Label + Red Bull",   cat:"Combos", venda:1210, gin:"JW Gold Label"},
+    {nome:"Combo JW Blue Label + Red Bull",   cat:"Combos", venda:3300, gin:"JW Blue Label"},
+    {nome:"Combo Royal Salute + Red Bull",    cat:"Combos", venda:3300, gin:"Royal Salute 21 anos"},
+    {nome:"Combo Woodford Reserve + Red Bull",cat:"Combos", venda:1100, gin:"Woodford Reserve"},
+    {nome:"Combo Gentleman Jack + Red Bull",  cat:"Combos", venda:1100, gin:"Gentleman Jack"},
+    {nome:"Combo Jack Single Barrel + Red Bull",cat:"Combos",venda:1100,gin:"Jack Daniel\'s Single Barrel"},
+    {nome:"Combo Chivas 12 + Red Bull",       cat:"Combos", venda:970,  gin:"Chivas Regal 12 anos"},
+    {nome:"Combo Dewar\'s 15 + Red Bull",    cat:"Combos", venda:1210, gin:"Dewar\'s 15"},
+    {nome:"Combo Dewar\'s 18 + Red Bull",    cat:"Combos", venda:2110, gin:"Dewar\'s 18"},
+    // ── COMBOS + TÔNICA ────────────────────────────────────────────────────────
+    {nome:"Combo Gin Bombay + Tônica",        cat:"Combos", venda:725,  gin:"Garrafa Bombay 750ml",    tonica:true},
+    {nome:"Combo Star of Bombay + Tônica",    cat:"Combos", venda:915,  gin:"Garrafa Star Of Bombay 750ml", tonica:true},
+    {nome:"Combo Hendricks + Tônica",         cat:"Combos", venda:845,  gin:"Garrafa Hendricks 700ml", tonica:true},
+    {nome:"Combo Tanqueray Ten + Tônica",     cat:"Combos", venda:915,  gin:"Garrafa Tanqueray Ten 750ml", tonica:true},
+  ];
+
+  // Get products from Firestore to match IDs
+  const prodSnap = await db.collection("produtos").get();
+  const prods = prodSnap.docs.map(d=>d.data());
+
+  function findProd(nome) {
+    const nl = nome.toLowerCase();
+    return prods.find(p=>
+      p.nome.toLowerCase()===nl ||
+      p.nome.toLowerCase().includes(nl) ||
+      nl.includes(p.nome.toLowerCase())
+    );
+  }
+
+  const rb   = findProd("Red Bull Energy 250ml") || findProd("Red Bull");
+  const ton  = findProd("Schweppes Tônica 200ml") || findProd("Schweppes Tônica");
+
+  let count=0;
+  for(const combo of COMBOS){
+    const garrafa = findProd(combo.gin);
+    if(!garrafa){ console.warn("Garrafa não encontrada:",combo.gin); continue; }
+
+    const mixer = combo.tonica ? ton : rb;
+    if(!mixer){ console.warn("Mixer não encontrado"); continue; }
+
+    const ings = [
+      {produto_id: garrafa.id, nome_prod: garrafa.nome, quantidade_ml: garrafa.capacidade_ml||750, tipo:"garrafa"},
+      {produto_id: mixer.id,   nome_prod: mixer.nome,   quantidade_ml: mixer.capacidade_ml||250,  tipo:"mixer",   qtd_unidades:5},
+    ];
+
+    await db.collection("fichas").add({
+      nome: combo.nome,
+      categoria: combo.cat,
+      preco_venda: combo.venda,
+      tipo_combo: combo.tonica?"tonica":"redbull",
+      ingredientes: ings,
+      origem: "combo_seed",
+    });
+    count++;
+  }
+  console.log("Combos cadastrados:", count);
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function init(){

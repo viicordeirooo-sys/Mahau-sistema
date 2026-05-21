@@ -9,143 +9,154 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;font-size:13px;display:flex;height:100vh;overflow:hidden}
-::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:#0d1117}::-webkit-scrollbar-thumb{background:#2d333b;border-radius:3px}
-input,select,button{font-family:inherit}
-input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
-
-/* SIDEBAR */
+body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;font-size:13px}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:#0d1117}::-webkit-scrollbar-thumb{background:#2d333b;border-radius:3px}
+input,select,button{font-family:inherit}input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+#app{display:flex;height:100vh;overflow:hidden}
 #sb{width:200px;background:#161b22;border-right:1px solid #21262d;display:flex;flex-direction:column;flex-shrink:0}
-.sb-logo{padding:18px 16px;border-bottom:1px solid #21262d}
-.sb-sys{font-size:9px;color:#484f58;font-weight:600;letter-spacing:1px;display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.sb-dot{width:7px;height:7px;border-radius:1px;background:#2563eb;display:inline-block}
-.sb-name{font-size:17px;font-weight:800;letter-spacing:-.5px}
+#main{flex:1;overflow:auto;padding:20px;background:#0d1117;padding-bottom:20px}
+.sb-logo{padding:16px;border-bottom:1px solid #21262d}
+.sb-tag{font-size:9px;color:#484f58;font-weight:600;letter-spacing:1px;display:flex;align-items:center;gap:5px;margin-bottom:5px}
+.sd{width:7px;height:7px;border-radius:1px;background:#2563eb}
+.sb-name{font-size:16px;font-weight:800;letter-spacing:-.5px}
 .sb-date{font-size:10px;color:#484f58;margin-top:2px}
-nav{padding:8px 0;flex:1}
-.nb{display:flex;align-items:center;gap:9px;padding:10px 16px;width:100%;background:none;border:none;border-left:2px solid transparent;color:#8b949e;cursor:pointer;font-size:12px;font-weight:400;text-align:left;transition:all .1s}
+#sbnav{padding:6px 0;flex:1;overflow-y:auto}
+.nb{display:flex;align-items:center;gap:8px;padding:10px 14px;width:100%;background:none;border:none;border-left:2px solid transparent;color:#8b949e;cursor:pointer;font-size:12px;font-weight:400;text-align:left}
 .nb.on{background:#1c2332;border-left-color:#2563eb;color:#e6edf3;font-weight:600}
-.nb svg{width:15px;height:15px;flex-shrink:0}
-.sb-sum{padding:14px 16px;border-top:1px solid #21262d}
-.ss-t{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px}
-.ss-r{display:flex;justify-content:space-between;margin-bottom:5px}
-.ss-l{font-size:10px;color:#484f58}
-.ss-v{font-size:10px;font-weight:600;font-family:'Courier New',monospace}
-
-/* MAIN */
-#main{flex:1;overflow:auto;padding:24px;background:#0d1117}
+.sb-sum{padding:12px 14px;border-top:1px solid #21262d}
+.ss-t{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px}
+.ss-r{display:flex;justify-content:space-between;margin-bottom:4px}
+.ss-l{font-size:10px;color:#484f58}.ss-v{font-size:10px;font-weight:600;font-family:monospace}
+#bnav{display:none;position:fixed;bottom:0;left:0;right:0;background:#161b22;border-top:1px solid #21262d;z-index:100;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+.bn{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 10px 10px;background:none;border:none;color:#484f58;cursor:pointer;font-size:8px;font-weight:600;letter-spacing:.5px;gap:3px;min-width:56px}
+.bn.on{color:#2563eb}.bn svg{width:17px;height:17px;flex-shrink:0}
 .page{display:none}.page.on{display:block}
 .eyebrow{font-size:11px;color:#3b82f6;font-weight:600;letter-spacing:.8px;margin-bottom:4px}
-.pg-t{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:20px}
-.pg-h{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px}
+.pg-t{font-size:20px;font-weight:700;letter-spacing:-.5px;margin-bottom:14px}
+.pg-h{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;gap:8px;flex-wrap:wrap}
 .pg-h .pg-t{margin-bottom:0}
-
-/* KPIS */
-.kpis{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-.kpi{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:16px 18px;flex:1;min-width:150px}
-.kpi-l{font-size:10px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px}
-.kpi-v{font-size:20px;font-weight:700;font-family:'Courier New',monospace}
-.kpi-s{font-size:10px;color:#484f58;margin-top:4px}
-
-/* BOX/TABLE */
-.box{background:#161b22;border:1px solid #21262d;border-radius:8px;overflow:hidden;margin-bottom:14px}
-.bh{padding:10px 14px;border-bottom:1px solid #21262d;display:flex;justify-content:space-between;align-items:center;background:#1c2332}
-.bt{font-size:11px;color:#8b949e;font-weight:600}
-.bb{padding:16px}
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:500px}
-th{padding:8px 12px;text-align:left;color:#484f58;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid #21262d;white-space:nowrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px}
+.kpi{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:13px}
+.kpi-l{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px}
+.kpi-v{font-size:17px;font-weight:700;font-family:monospace;line-height:1.2}
+.kpi-s{font-size:10px;color:#484f58;margin-top:3px}
+.box{background:#161b22;border:1px solid #21262d;border-radius:8px;overflow:hidden;margin-bottom:12px}
+.bh{padding:9px 13px;border-bottom:1px solid #21262d;display:flex;justify-content:space-between;align-items:center;background:#1c2332}
+.bt{font-size:11px;color:#8b949e;font-weight:600}.bb{padding:13px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;min-width:400px}
+th{padding:7px 10px;text-align:left;color:#484f58;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid #21262d;white-space:nowrap}
 th.r{text-align:right}
-td{padding:10px 12px;border-bottom:1px solid #1c2332;font-size:12px;color:#e6edf3}
-td.r{text-align:right}td.mn{font-family:'Courier New',monospace}td.mt{color:#484f58}
-tr:hover td{background:#1a2030}
-.tr-tot td{background:#1c2332;font-weight:700}
-.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;font-family:'Courier New',monospace;white-space:nowrap}
-
-/* FORM */
-.fb{background:#161b22;border:1px solid #2d333b;border-radius:8px;padding:20px;margin-bottom:14px}
-.ft{font-weight:600;font-size:14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
-.fg{display:grid;gap:10px;margin-bottom:14px}
+td{padding:9px 10px;border-bottom:1px solid #1c2332;font-size:12px;color:#e6edf3}
+td.r{text-align:right}td.mn{font-family:monospace}td.mt{color:#484f58}td.w6{font-weight:600}
+tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
+.badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;font-family:monospace;white-space:nowrap}
+.alert-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.fb{background:#161b22;border:1px solid #2d333b;border-radius:8px;padding:14px;margin-bottom:12px}
+.ft{font-weight:600;font-size:13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.fg{display:grid;gap:8px;margin-bottom:10px}
 .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}.g4{grid-template-columns:1fr 1fr 1fr 1fr}
-.fi{display:flex;flex-direction:column;gap:4px}
-.fi label{font-size:10px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase}
-.fi input,.fi select{background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:8px 10px;color:#e6edf3;font-size:12px;outline:none;width:100%;font-family:'Courier New',monospace;transition:border-color .15s}
+.fi{display:flex;flex-direction:column;gap:3px}
+.fi label{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase}
+.fi input,.fi select{background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:13px;outline:none;width:100%;font-family:monospace;-webkit-appearance:none}
 .fi input:focus,.fi select:focus{border-color:#2563eb}
-.slbl{font-size:10px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin:8px 0}
-
-/* BUTTONS */
-.btn{border:none;border-radius:5px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:background .15s}
-.bp{background:#2563eb;color:#fff}.bp:hover{background:#3b82f6}
-.bg_{background:transparent;color:#8b949e;border:1px solid #2d333b}.bg_:hover{color:#e6edf3}
+.slbl{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin:10px 0 6px}
+.ing-row{display:grid;grid-template-columns:1fr 90px 32px;gap:6px;align-items:center;margin-bottom:6px}
+.ing-sel{background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:8px 10px;color:#e6edf3;font-size:12px;outline:none;width:100%;-webkit-appearance:none}
+.ing-ml{background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:8px 10px;color:#e6edf3;font-size:12px;outline:none;width:100%;font-family:monospace;-webkit-appearance:none}
+.btn{border:none;border-radius:6px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.bp{background:#2563eb;color:#fff}.bg_{background:transparent;color:#8b949e;border:1px solid #2d333b}
 .bd_{background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)}
-.bsm{padding:4px 10px;font-size:10px}
-.bi{background:none;border:none;color:#484f58;cursor:pointer;padding:2px 5px;font-size:16px;line-height:1}
-.bi:hover{color:#8b949e}
-
-/* MISC */
+.bsm{padding:4px 9px;font-size:10px}
+.bi{background:none;border:none;color:#484f58;cursor:pointer;padding:3px 5px;font-size:16px;line-height:1}
 .ctr{display:flex;align-items:center;gap:10px}
-.cb{background:#1c2332;border:1px solid #2d333b;color:#e6edf3;border-radius:5px;width:30px;height:30px;cursor:pointer;font-size:16px;font-weight:700}
-.cv{font-family:'Courier New',monospace;font-size:24px;font-weight:700}
-.br-row{margin-bottom:10px}
-.br-m{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px}
+.cb{background:#1c2332;border:1px solid #2d333b;color:#e6edf3;border-radius:5px;width:32px;height:32px;cursor:pointer;font-size:16px;font-weight:700}
+.cv{font-family:monospace;font-size:22px;font-weight:700}
+.br-row{margin-bottom:8px}
+.br-m{display:flex;justify-content:space-between;margin-bottom:3px;font-size:11px}
 .br-t{background:#1c2332;border-radius:3px;height:5px;overflow:hidden}
 .br-f{height:5px;border-radius:3px}
-.prog{background:#1c2332;border-radius:3px;height:4px;overflow:hidden;width:50px;display:inline-block;vertical-align:middle;margin-right:6px}
+.prog{background:#1c2332;border-radius:3px;height:4px;overflow:hidden;width:44px;display:inline-block;vertical-align:middle;margin-right:5px}
 .pf{height:4px;background:#2563eb;border-radius:3px}
-.ec{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .15s}
-.ec:hover,.ec.on{border-color:#2563eb;background:#1c2332}
-.ech{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.dre-box{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:16px}
-.dre-r{display:flex;justify-content:space-between;padding:3px 0;font-size:11px}
-.dre-r.bold{font-weight:700}.dre-r.big{padding-top:10px}
-.dre-sep{border-top:1px solid #21262d;margin:8px 0}
-.pills{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-.pill{background:transparent;color:#484f58;border:1px solid #21262d;border-radius:20px;padding:4px 12px;font-size:10px;font-weight:600;cursor:pointer}
+.pills{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.pill{background:transparent;color:#484f58;border:1px solid #21262d;border-radius:20px;padding:4px 11px;font-size:10px;font-weight:600;cursor:pointer}
 .pill.on{background:#2563eb;color:#fff;border-color:#2563eb}
-.wb{background:#161b22;border:1px solid #21262d;border-radius:8px;margin-bottom:12px;overflow:hidden}
-.wh{display:flex;justify-content:space-between;padding:10px 14px;background:#1c2332;border-bottom:1px solid #21262d}
-.eq-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.eq-c{background:#1c2332;border-radius:6px;padding:12px 16px;flex:1;min-width:120px;border-left:3px solid #2563eb}
-.eq-l{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;margin-bottom:5px}
-.eq-v{font-family:'Courier New',monospace;font-size:15px;font-weight:700}
-.gr2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-.g2c{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
-.sw{position:relative;flex:1;min-width:200px}
-.si{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#484f58;pointer-events:none;font-size:12px}
-.si-inp{background:#161b22;border:1px solid #21262d;border-radius:5px;padding:8px 10px 8px 30px;color:#e6edf3;font-size:12px;outline:none;width:100%;font-family:'Courier New',monospace}
-.sbs{display:flex;gap:6px}
-.sb2{background:transparent;color:#484f58;border:1px solid #2d333b;border-radius:5px;padding:7px 12px;font-size:10px;font-weight:600;cursor:pointer}
+.wb{background:#161b22;border:1px solid #21262d;border-radius:8px;margin-bottom:10px;overflow:hidden}
+.wh{display:flex;justify-content:space-between;padding:9px 13px;background:#1c2332;border-bottom:1px solid #21262d}
+.ev-card{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:13px;margin-bottom:9px;cursor:pointer}
+.ev-card.on{border-color:#2563eb;background:#1c2332}
+.ech{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:9px}
+.flt{display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.sw{position:relative;flex:1;min-width:160px}
+.si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#484f58;pointer-events:none;font-size:12px}
+.si-inp{background:#161b22;border:1px solid #21262d;border-radius:5px;padding:9px 9px 9px 29px;color:#e6edf3;font-size:12px;outline:none;width:100%;-webkit-appearance:none}
+.sbs{display:flex;gap:5px;flex-wrap:wrap}
+.sb2{background:transparent;color:#484f58;border:1px solid #2d333b;border-radius:5px;padding:7px 9px;font-size:10px;font-weight:600;cursor:pointer}
 .sb2.on{background:#2563eb;color:#fff;border-color:#2563eb}
-.flt{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
-.hidden{display:none!important}
-.empty{text-align:center;padding:40px;color:#484f58}
+.dre-box{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px;margin-top:10px}
+.dre-r{display:flex;justify-content:space-between;padding:3px 0;font-size:11px}
+.dre-sep{border-top:1px solid #21262d;margin:7px 0}
+.empty{text-align:center;padding:30px;color:#484f58}
+.tag-ok{color:#22c55e}.tag-warn{color:#f59e0b}.tag-red{color:#ef4444}
 .green{color:#22c55e}.red{color:#ef4444}.amber{color:#f59e0b}
+.alert-strip{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:10px 13px;margin-bottom:10px;font-size:11px;color:#ef4444}
+.ok-strip{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:6px;padding:10px 13px;margin-bottom:10px;font-size:11px;color:#22c55e}
+.section-divider{font-size:9px;color:#484f58;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin:14px 0 8px;padding-bottom:6px;border-bottom:1px solid #21262d}
+@media(max-width:680px){
+  #sb{display:none}#bnav{display:flex}
+  #main{padding:14px;padding-bottom:68px}
+  .g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}
+  .pg-h{flex-direction:column;align-items:flex-start}
+  .ing-row{grid-template-columns:1fr 80px 32px}
+}
+@media(min-width:681px){#bnav{display:none!important}#sb{display:flex}}
 </style>
 </head>
 <body>
-
+<div id="app">
 <div id="sb">
   <div class="sb-logo">
-    <div class="sb-sys"><span class="sb-dot"></span>SISTEMA FINANCEIRO</div>
+    <div class="sb-tag"><span class="sd"></span>SISTEMA FINANCEIRO</div>
     <div class="sb-name">Mahau Balada</div>
     <div class="sb-date" id="sb-date"></div>
   </div>
-  <nav id="nav"></nav>
+  <div id="sbnav"></div>
   <div class="sb-sum">
-    <div class="ss-t">Resumo do Mês</div>
+    <div class="ss-t">Resumo</div>
     <div class="ss-r"><span class="ss-l">Faturamento</span><span class="ss-v" id="ss-fat">—</span></div>
     <div class="ss-r"><span class="ss-l">CMV Médio</span><span class="ss-v" id="ss-cmv">—</span></div>
     <div class="ss-r"><span class="ss-l">Resultado</span><span class="ss-v" id="ss-res">—</span></div>
-    <div class="ss-r"><span class="ss-l">Rateio/Noite</span><span class="ss-v" id="ss-rat">—</span></div>
+    <div class="ss-r"><span class="ss-l">Alertas Estoque</span><span class="ss-v tag-red" id="ss-alr">—</span></div>
   </div>
 </div>
-
 <div id="main">
-  <div id="p-dash" class="page on"></div>
-  <div id="p-card" class="page"></div>
-  <div id="p-eventos" class="page"></div>
-  <div id="p-compras" class="page"></div>
-  <div id="p-custos" class="page"></div>
+  <div id="p-dash"    class="page on"></div>
+  <div id="p-prod"    class="page"></div>
+  <div id="p-fichas"  class="page"></div>
   <div id="p-estoque" class="page"></div>
+  <div id="p-compras" class="page"></div>
+  <div id="p-eventos" class="page"></div>
+  <div id="p-custos"  class="page"></div>
+  <div id="p-cmv"     class="page"></div>
+</div>
+</div>
+<div id="bnav" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+  <button class="bn on" id="bn-dash"    onclick="go('dash')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>DASH</button>
+  <button class="bn" id="bn-prod"    onclick="go('prod')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>PROD.</button>
+  <button class="bn" id="bn-fichas"  onclick="go('fichas')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>FICHAS</button>
+  <button class="bn" id="bn-estoque" onclick="go('estoque')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>ESTOQUE</button>
+  <button class="bn" id="bn-compras" onclick="go('compras')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6h18l-3-4z"/><path d="M3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6"/></svg>COMPRAS</button>
+  <button class="bn" id="bn-eventos" onclick="go('eventos')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>EVENTOS</button>
+  <button class="bn" id="bn-custos"  onclick="go('custos')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>FIXOS</button>
+  <button class="bn" id="bn-cmv"     onclick="go('cmv')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>CMV</button>
 </div>
 
 <script>
@@ -161,604 +172,1251 @@ try {
     appId:"1:748350373228:web:cbbd080ce643f8308a0749"
   });
   db = firebase.firestore();
-} catch(e) { console.warn('Firebase init:', e.message); }
+} catch(e){ console.warn("Firebase:",e.message); }
+
+const FS = {
+  save: async (col,data) => {
+    if(!db) return;
+    if(data.id) await db.collection(col).doc(String(data.id)).set(data);
+    else { const r=await db.collection(col).add(data); await r.update({id:r.id}); }
+  },
+  del:    (col,id)    => db&&db.collection(col).doc(String(id)).delete(),
+  setDoc: (col,id,d)  => db&&db.collection(col).doc(id).set(d,{merge:true}),
+  listen: (col,cb)    => db?db.collection(col).onSnapshot(s=>cb(s.docs.map(d=>d.data()))):null,
+};
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const S = {
-  page:'dash', evSel:null, cardCat:'Todos', cardSort:'nome',
-  eventos:[], custos:[], compras:[],
-  config:{datasNoMes:4, estoqueInicial:0}
+  page:"dash",
+  produtos:[],fichas:[],compras:[],eventos:[],
+  evento_vendas:[],custos:[],config:{datasNoMes:4}
 };
 
 // ── FORMATTERS ────────────────────────────────────────────────────────────────
-const R  = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
-const Rf = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const P  = v => `${((v||0)*100).toFixed(1)}%`;
-const chip = (txt, color) => `<span class="badge" style="background:${color}18;color:${color}">${txt}</span>`;
-const cCmv = p => p>0.30?'#ef4444':p>0.28?'#f59e0b':'#22c55e';
-
-// ── FIREBASE OPS ──────────────────────────────────────────────────────────────
-const FS = {
-  save: async (col, data) => {
-    if (!db) return alert('Firebase não conectado. Abra pelo link do Vercel.');
-    if (data.id) await db.collection(col).doc(String(data.id)).set(data);
-    else { const r = await db.collection(col).add(data); await r.update({id:r.id}); }
-  },
-  del:    (col, id)     => db ? db.collection(col).doc(String(id)).delete() : null,
-  setDoc: (col, id, d)  => db ? db.collection(col).doc(id).set(d, {merge:true}) : null,
-  listen: (col, cb)     => { if(db) db.collection(col).onSnapshot(s => cb(s.docs.map(d=>d.data()))); },
-  listenDoc: (col,id,cb)=> { if(db) db.collection(col).doc(id).onSnapshot(s=> cb(s.exists?s.data():null)); },
-};
+const R  = v=>(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0});
+const Rf = v=>(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const P  = v=>`${((v||0)*100).toFixed(1)}%`;
+const chip=(t,c)=>`<span class="badge" style="background:${c}18;color:${c}">${t}</span>`;
+const el  = id=>document.getElementById(id);
+const set = (id,h)=>{const e=el(id);if(e)e.innerHTML=h;};
+const nv  = id=>parseFloat(el(id)?.value)||0;
+const sv  = id=>el(id)?.value||"";
 
 // ── CALCS ─────────────────────────────────────────────────────────────────────
-const totalFixo    = () => S.custos.reduce((s,c)=>s+(c.valor||0),0);
-const totalCompras = () => S.compras.reduce((s,c)=>s+(c.total||0),0);
-const rateio       = () => S.config.datasNoMes>0 ? totalFixo()/S.config.datasNoMes : 0;
+function estoqueAtual(pid) {
+  const p = S.produtos.find(x=>x.id===pid); if(!p) return 0;
+  const cap = p.capacidade_ml||1;
+  let ml = (p.estoque_inicial||0)*cap;
+  S.compras.filter(c=>c.produto_id===pid).forEach(c=>{ ml+=(c.qtd||0)*cap; });
+  S.evento_vendas.forEach(v=>{
+    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
+    if(v.tipo==="produto"&&v.item_id===pid){ ml-=qtd*cap; }
+    if(v.tipo==="ficha"){
+      const f=S.fichas.find(x=>x.id===v.item_id);
+      if(f&&f.ingredientes) f.ingredientes.forEach(ing=>{
+        if(ing.produto_id===pid) ml-=qtd*(ing.quantidade_ml||0);
+      });
+    }
+  });
+  return ml/cap;
+}
+
+function cmvEvento(eid) {
+  const vendas=S.evento_vendas.filter(v=>v.evento_id===eid);
+  let cmv=0, rec_bar=0;
+  vendas.forEach(v=>{
+    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
+    const qv=v.qtd_vendida||0;
+    if(v.tipo==="produto"){
+      const p=S.produtos.find(x=>x.id===v.item_id);
+      if(p){ cmv+=qtd*(p.preco_compra||0); rec_bar+=qv*(p.preco_venda||0); }
+    }
+    if(v.tipo==="ficha"){
+      const f=S.fichas.find(x=>x.id===v.item_id);
+      if(f){
+        rec_bar+=qv*(f.preco_venda||0);
+        if(f.ingredientes) f.ingredientes.forEach(ing=>{
+          const p=S.produtos.find(x=>x.id===ing.produto_id);
+          if(p&&p.preco_compra&&p.capacidade_ml)
+            cmv+=qtd*(ing.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
+        });
+      }
+    }
+  });
+  return {cmv, rec_bar};
+}
 
 function calcEv(e) {
-  const rec=(e.bar||0)+(e.entrada||0);
-  const cmv=Math.max(0,(e.compras||0)-(e.sobras||0));
+  const entrada=e.entrada||0;
+  const {cmv,rec_bar}=cmvEvento(e.id);
+  const rec=rec_bar+entrada;
   const dir=(e.dj||0)+(e.seguranca||0)+(e.staff||0)+(e.outros||0);
-  const vip=e.vip_custo||0, des=e.desperdicio||0;
-  const res=rec-cmv-vip-des-dir-rateio();
-  return {rec,cmv,cmvP:rec?cmv/rec:0,vipP:rec?vip/rec:0,desP:rec?des/rec:0,dir,res,mg:rec?res/rec:0};
+  const rat=rateio();
+  const res=rec-cmv-dir-rat;
+  return {rec,cmv,cmvP:rec?cmv/rec:0,dir,res,mg:rec?res/rec:0,rec_bar};
 }
+
+function alertasEstoque() {
+  return S.produtos.filter(p=>{
+    const atual=estoqueAtual(p.id);
+    return atual<=(p.estoque_min||0);
+  });
+}
+
+const totalFixo=()=>S.custos.reduce((s,c)=>s+(c.valor||0),0);
+const rateio=()=>S.config.datasNoMes>0?(totalFixo()/S.config.datasNoMes):0;
+const totalComprasMes=()=>S.compras.reduce((s,c)=>s+(c.total||0),0);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
-const PAGES = [
-  {id:'dash',    label:'Dashboard'},
-  {id:'card',    label:'Cardápio'},
-  {id:'eventos', label:'Eventos'},
-  {id:'compras', label:'Compras'},
-  {id:'custos',  label:'Custos Fixos'},
-  {id:'estoque', label:'Estoque / CMV'},
+const PAGES=[
+  {id:"dash",    label:"Dashboard"},
+  {id:"prod",    label:"Produtos"},
+  {id:"fichas",  label:"Fichas Técnicas"},
+  {id:"estoque", label:"Estoque"},
+  {id:"compras", label:"Compras"},
+  {id:"eventos", label:"Eventos"},
+  {id:"custos",  label:"Custos Fixos"},
+  {id:"cmv",     label:"CMV"},
 ];
 
-function initNav() {
-  document.getElementById('nav').innerHTML = PAGES.map(p=>`
-    <button class="nb${S.page===p.id?' on':''}" onclick="go('${p.id}')">${p.label}</button>
-  `).join('');
-  document.getElementById('sb-date').textContent =
-    new Date().toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+function initNav(){
+  el("sbnav").innerHTML=PAGES.map(p=>`
+    <button class="nb${S.page===p.id?" on":""}" onclick="go('${p.id}')">${p.label}</button>
+  `).join("");
+  el("sb-date").textContent=new Date().toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 }
 
-function go(id) {
-  S.page = id;
-  document.querySelectorAll('.page').forEach(el=>el.classList.remove('on'));
-  document.getElementById('p-'+id).classList.add('on');
-  document.querySelectorAll('.nb').forEach(b=>{
-    b.classList.toggle('on', b.textContent===PAGES.find(p=>p.id===id)?.label);
-  });
+function go(id){
+  S.page=id;
+  document.querySelectorAll(".page").forEach(e=>e.classList.remove("on"));
+  el("p-"+id)?.classList.add("on");
+  document.querySelectorAll(".nb").forEach(b=>b.classList.toggle("on",b.textContent===PAGES.find(p=>p.id===id)?.label));
+  document.querySelectorAll(".bn").forEach(b=>b.classList.toggle("on",b.id==="bn-"+id));
   render();
 }
 
-// ── SIDEBAR SUMMARY ───────────────────────────────────────────────────────────
-function renderSidebar() {
-  const calcs = S.eventos.map(e=>({...e,...calcEv(e)}));
+function renderSidebar(){
+  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tRes=calcs.reduce((s,e)=>s+e.res,0);
   const cmvP=tRec?calcs.reduce((s,e)=>s+e.cmv,0)/tRec:0;
-  document.getElementById('ss-fat').textContent = tRec?R(tRec):'—';
-  const cmvEl = document.getElementById('ss-cmv');
-  cmvEl.textContent = tRec?P(cmvP):'—';
-  cmvEl.className = 'ss-v '+(cmvP>0.28?'amber':tRec?'green':'');
-  const resEl = document.getElementById('ss-res');
-  resEl.textContent = tRec?R(tRes):'—';
-  resEl.className = 'ss-v '+(tRes>0?'green':'red');
-  document.getElementById('ss-rat').textContent = R(rateio());
+  const alr=alertasEstoque().length;
+  el("ss-fat").textContent=tRec?R(tRec):"—";
+  const cv=el("ss-cmv"); cv.textContent=tRec?P(cmvP):"—"; cv.className="ss-v "+(cmvP>0.28?"amber":tRec?"green":"");
+  const rv=el("ss-res"); rv.textContent=tRec?R(tRes):"—"; rv.className="ss-v "+(tRes>0?"green":"red");
+  el("ss-alr").textContent=alr>0?`${alr} produto${alr>1?"s":""}!`:"—";
 }
 
-// ── RENDER ROUTER ─────────────────────────────────────────────────────────────
-function render() {
+function render(){
   renderSidebar();
-  const p = S.page;
-  if(p==='dash')    renderDash();
-  if(p==='card')    renderCard();
-  if(p==='eventos') renderEventos();
-  if(p==='compras') renderCompras();
-  if(p==='custos')  renderCustos();
-  if(p==='estoque') renderEstoque();
+  const p=S.page;
+  if(p==="dash")    renderDash();
+  if(p==="prod")    renderProd();
+  if(p==="fichas")  renderFichas();
+  if(p==="estoque") renderEstoque();
+  if(p==="compras") renderCompras();
+  if(p==="eventos") renderEventos();
+  if(p==="custos")  renderCustos();
+  if(p==="cmv")     renderCMV();
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-function el(id) { return document.getElementById(id); }
-function set(id, html) { const e=el(id); if(e) e.innerHTML=html; }
-function nv(id) { return parseFloat(el(id)?.value)||0; }
-function sv(id) { return el(id)?.value||''; }
-function barRow(label, value, max, color) {
-  return `<div class="br-row">
-    <div class="br-m"><span style="color:${color};font-weight:500">${label}</span>
-    <span style="font-family:'Courier New';font-weight:600;color:${color}">${R(value)}</span></div>
-    <div class="br-t"><div class="br-f" style="width:${max?(value/max*100).toFixed(1):0}%;background:${color}"></div></div>
-  </div>`;
-}
-function kpiHTML(title, value, sub, color, accent) {
-  return `<div class="kpi" style="border-top:2px solid ${accent||'#21262d'}">
+function kpi(title,value,sub,color,accent){
+  return `<div class="kpi" style="border-top:2px solid ${accent||"#21262d"}">
     <div class="kpi-l">${title}</div>
-    <div class="kpi-v" style="color:${color||'#e6edf3'}">${value}</div>
-    ${sub?`<div class="kpi-s">${sub}</div>`:''}
+    <div class="kpi-v" style="color:${color||"#e6edf3"}">${value}</div>
+    ${sub?`<div class="kpi-s">${sub}</div>`:""}
   </div>`;
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function renderDash() {
-  const calcs = S.eventos.map(e=>({...e,...calcEv(e)}));
+function renderDash(){
+  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
   const tRes=calcs.reduce((s,e)=>s+e.res,0);
-  const tVip=calcs.reduce((s,e)=>s+(e.vip_custo||0),0);
   const cmvP=tRec?tCmv/tRec:0;
+  const alrs=alertasEstoque();
+  const cCmv=cmvP>0.30?"#ef4444":cmvP>0.28?"#f59e0b":"#22c55e";
 
-  const canais=[
-    {n:'Bar',    v:calcs.reduce((s,e)=>s+(e.bar||0),0),    c:'#2563eb'},
-    {n:'Entrada',v:calcs.reduce((s,e)=>s+(e.entrada||0),0),c:'#10b981'},
-  ];
-  const maxC = Math.max(...canais.map(c=>c.v),1);
+  const alertHTML=alrs.length?`<div class="alert-strip">
+    ⚠ ${alrs.length} produto${alrs.length>1?"s abaixo":" abaixo"} do estoque mínimo:
+    ${alrs.slice(0,5).map(p=>`<strong>${p.nome}</strong>`).join(", ")}${alrs.length>5?` +${alrs.length-5} mais`:""}
+  </div>`:"";
 
-  set('p-dash',`
+  set("p-dash",`
     <div class="eyebrow">VISÃO GERAL</div>
     <div class="pg-t">Dashboard Financeiro</div>
+    ${alertHTML}
     <div class="kpis">
-      ${kpiHTML('Faturamento Bruto', tRec?R(tRec):'Sem dados', calcs.length+' eventos', '#e6edf3', '#2563eb')}
-      ${kpiHTML('CMV Médio', tRec?P(cmvP):'—', tRec?(cmvP>0.28?'⚠ Acima de 28%':'✓ Dentro da meta'):'Cadastre eventos', cCmv(cmvP), cCmv(cmvP))}
-      ${kpiHTML('Resultado do Mês', tRec?R(tRes):'—', tRec?'Margem '+P(tRes/tRec):'—', tRes>0?'#22c55e':'#ef4444', tRes>0?'#22c55e':'#ef4444')}
-      ${kpiHTML('Custo VIP', tVip?R(tVip):'—', tRec?P(tVip/tRec)+' do fat.':'—', '#f59e0b', '#f59e0b')}
+      ${kpi("Faturamento Bruto",tRec?R(tRec):"Sem dados",calcs.length+" eventos","#e6edf3","#2563eb")}
+      ${kpi("CMV Médio",tRec?P(cmvP):"—",tRec?(cmvP>0.28?"⚠ Acima de 28%":"✓ Dentro da meta"):"Cadastre eventos",cCmv,cCmv)}
+      ${kpi("Resultado do Mês",tRec?R(tRes):"—",tRec?"Margem "+P(tRes/tRec):"—",tRes>0?"#22c55e":"#ef4444",tRes>0?"#22c55e":"#ef4444")}
+      ${kpi("Alertas Estoque",alrs.length>0?alrs.length+"":"✓",alrs.length>0?"produtos abaixo do mínimo":"Tudo em ordem",alrs.length>0?"#ef4444":"#22c55e",alrs.length>0?"#ef4444":"#22c55e")}
     </div>
     <div class="box">
-      <div class="bh"><span class="bt">Resultado por Evento</span>
-        <button class="btn bg_ bsm" onclick="exportExcel()">⬇ Excel</button>
-      </div>
+      <div class="bh"><span class="bt">Resultado por Evento</span></div>
       <div class="tw"><table>
-        <thead><tr><th>Data</th><th>Evento</th><th class="r">Faturamento</th><th class="r">CMV%</th><th class="r">VIP%</th><th class="r">Resultado</th><th class="r">Margem</th></tr></thead>
-        <tbody>${calcs.length ? calcs.map(e=>`
-          <tr>
-            <td class="mn mt">${e.data||''}</td>
-            <td style="font-weight:600">${e.nome||''}</td>
-            <td class="r mn">${R(e.rec)}</td>
-            <td class="r">${chip(P(e.cmvP),cCmv(e.cmvP))}</td>
-            <td class="r">${chip(P(e.vipP),'#f59e0b')}</td>
-            <td class="r mn" style="color:${e.res>0?'#22c55e':'#ef4444'};font-weight:600">${R(e.res)}</td>
-            <td class="r">${chip(P(Math.max(0,e.mg)),e.mg>0.20?'#22c55e':e.mg>0.10?'#f59e0b':'#ef4444')}</td>
-          </tr>`).join('') : '<tr><td colspan="7" class="empty">Nenhum evento ainda.</td></tr>'}
+        <thead><tr><th>Data</th><th>Evento</th><th class="r">Receita</th><th class="r">CMV%</th><th class="r">Resultado</th><th class="r">Margem</th></tr></thead>
+        <tbody>${calcs.length?calcs.map(e=>`<tr>
+          <td class="mn mt">${e.data||""}</td>
+          <td class="w6">${e.nome||""}</td>
+          <td class="r mn">${R(e.rec)}</td>
+          <td class="r">${chip(P(e.cmvP),e.cmvP>0.30?"#ef4444":e.cmvP>0.28?"#f59e0b":"#22c55e")}</td>
+          <td class="r mn" style="color:${e.res>0?"#22c55e":"#ef4444"};font-weight:600">${R(e.res)}</td>
+          <td class="r">${chip(P(Math.max(0,e.mg)),e.mg>0.20?"#22c55e":e.mg>0.10?"#f59e0b":"#ef4444")}</td>
+        </tr>`).join(""):"<tr><td colspan='6' class='empty'>Nenhum evento ainda.</td></tr>"}
         </tbody>
       </table></div>
     </div>
-    <div class="box">
-      <div class="bh"><span class="bt">Receita por Canal</span></div>
-      <div class="bb">${canais.map(c=>barRow(c.n,c.v,maxC,c.c)).join('')}</div>
-    </div>
+    ${alrs.length?`<div class="box">
+      <div class="bh"><span class="bt">⚠ Estoque Abaixo do Mínimo</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th>Categoria</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Diferença</th></tr></thead>
+        <tbody>${alrs.map(p=>{
+          const atual=estoqueAtual(p.id);
+          return`<tr>
+            <td class="w6">${p.nome}</td>
+            <td class="mt">${p.categoria||""}</td>
+            <td class="r mn tag-red">${atual.toFixed(1)} ${p.unidade||"un"}</td>
+            <td class="r mn">${p.estoque_min||0} ${p.unidade||"un"}</td>
+            <td class="r mn tag-red">${(atual-(p.estoque_min||0)).toFixed(1)}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>`:""}
   `);
 }
 
-function exportExcel() {
-  const calcs = S.eventos.map(e=>({...e,...calcEv(e)}));
-  const rows = calcs.map(e=>({'Data':e.data,'Evento':e.nome,'Faturamento':e.rec,'Bar':e.bar||0,'Entrada':e.entrada||0,'CMV R$':e.cmv,'CMV%':P(e.cmvP),'VIP R$':e.vip_custo||0,'Resultado':e.res,'Margem%':P(e.mg)}));
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Eventos');
-  XLSX.writeFile(wb, 'mahau-eventos.xlsx');
-}
+// ── PRODUTOS ──────────────────────────────────────────────────────────────────
+let prodForm=null, prodQ="", prodCat="Todos";
+const CATS_PROD=["Todos","Destilados","Licores","Cervejas","Energéticos","Soft Drinks","Águas","Espumantes","Champagne","Vinhos","Sidras","Sake","Insumos"];
 
-// ── CARDÁPIO ──────────────────────────────────────────────────────────────────
-const CC = {"Pratos":"#10b981","Porções":"#f97316","Lanches":"#fb923c","Sobremesas":"#a855f7","Drinks Autorais":"#2563eb","Gin Tônicas":"#0ea5e9","Drinks Gin":"#38bdf8","Drinks Clássicos":"#3b82f6","Caipirinhas":"#22c55e","Shots":"#ef4444","Doses":"#8b5cf6","Garrafas":"#f59e0b","Combos":"#fbbf24","Champagne":"#eab308","Espumantes":"#c084fc","Vinhos":"#a78bfa","Cervejas":"#4ade80","Soft Drinks":"#22d3ee","Não Alcoólicos":"#6ee7b7","Sidras":"#86efac"};
-const MENU=[
-  {cat:"Pratos",nome:"Nhoque de Batata",preco:75},{cat:"Pratos",nome:"Risoto de Queijo Brie",preco:90},{cat:"Pratos",nome:"Salmão Grelhado",preco:98},{cat:"Pratos",nome:"Risoto de Cogumelo",preco:90},{cat:"Pratos",nome:"Ravioli de Búfala com Mignon",preco:87},{cat:"Pratos",nome:"Salada Caesar",preco:72},{cat:"Pratos",nome:"Fettutine Molho Branco",preco:87},{cat:"Pratos",nome:"Fettutine Carbonara",preco:87},
-  {cat:"Porções",nome:"Bruschetta Brie (6un)",preco:60},{cat:"Porções",nome:"Bruschetta Parma (6un)",preco:60},{cat:"Porções",nome:"Bruschetta Mista (6un)",preco:62},{cat:"Porções",nome:"Bruschetta Caprese (6un)",preco:57},{cat:"Porções",nome:"Espetinhos Mistos (6un)",preco:75},{cat:"Porções",nome:"Churros (6un)",preco:46},{cat:"Porções",nome:"Hot Roll Mahau (6un)",preco:67},{cat:"Porções",nome:"Mini Hambúrguers (5un)",preco:65},{cat:"Porções",nome:"Tiras de Frango (500g)",preco:65},{cat:"Porções",nome:"Mini Coxinha (10un)",preco:57},{cat:"Porções",nome:"Bolinho de Costela (8un)",preco:62},{cat:"Porções",nome:"Pastéis Mistos (6un)",preco:52},{cat:"Porções",nome:"Batata Palito",preco:52},{cat:"Porções",nome:"Filé Mignon Aperitivo",preco:97},{cat:"Porções",nome:"Parmegiana Aperitivo",preco:87},{cat:"Porções",nome:"Fish And Chips",preco:73},
-  {cat:"Lanches",nome:"Hambúrguer Mahau",preco:61},{cat:"Lanches",nome:"Hambúrguer de Costela",preco:62},{cat:"Lanches",nome:"Cheese Bacon",preco:64},{cat:"Lanches",nome:"Sanduíche Vegetariano",preco:62},{cat:"Lanches",nome:"Cheeseburguer",preco:55},{cat:"Lanches",nome:"Hambúrguer Brie & Bacon",preco:65},{cat:"Lanches",nome:"Sanduiche de Mignon",preco:64},
-  {cat:"Sobremesas",nome:"Torta de Chocolate",preco:42},{cat:"Sobremesas",nome:"Churros (6un)",preco:46},
-  {cat:"Drinks Autorais",nome:"Ahi",preco:52},{cat:"Drinks Autorais",nome:"Manawa",preco:52},{cat:"Drinks Autorais",nome:"Wairua",preco:52},{cat:"Drinks Autorais",nome:"Uira",preco:52},{cat:"Drinks Autorais",nome:"Maui",preco:52},{cat:"Drinks Autorais",nome:"Kaha",preco:52},{cat:"Drinks Autorais",nome:"Taimana",preco:52},{cat:"Drinks Autorais",nome:"Rongo",preco:52},{cat:"Drinks Autorais",nome:"Higball Mate e Pêssego",preco:52},{cat:"Drinks Autorais",nome:"Spritz Mahau",preco:52},
-  {cat:"Gin Tônicas",nome:"Gin Tônica Mahau",preco:49},{cat:"Gin Tônicas",nome:"Gin Tônica Grape",preco:49},{cat:"Gin Tônicas",nome:"Gin Tônica Tradicional",preco:49},{cat:"Gin Tônicas",nome:"Gin Tônica Tangerina",preco:49},{cat:"Gin Tônicas",nome:"Gin Tônica Pitaya",preco:49},{cat:"Gin Tônicas",nome:"Gin Tônica Hendricks",preco:66},{cat:"Gin Tônicas",nome:"Gin Tônica Tanqueray Ten",preco:66},{cat:"Gin Tônicas",nome:"Gin Tônica Bombay",preco:63},{cat:"Gin Tônicas",nome:"Gin Bombay c/ Pink Lemonade",preco:64},{cat:"Gin Tônicas",nome:"Gin Tônica Star Of Bombay",preco:66},
-  {cat:"Drinks Gin",nome:"Gin Tropical",preco:54},{cat:"Drinks Gin",nome:"Gin Melancita",preco:54},{cat:"Drinks Gin",nome:"Tanqueray Ten + Redbull",preco:69},{cat:"Drinks Gin",nome:"Hendricks + Redbull",preco:69},{cat:"Drinks Gin",nome:"Gin Bombay c/ RedBull",preco:66},{cat:"Drinks Gin",nome:"Star Of Bombay + Redbull",preco:69},
-  {cat:"Drinks Clássicos",nome:"Aperol Spritz",preco:53},{cat:"Drinks Clássicos",nome:"Cosmopolitan",preco:53},{cat:"Drinks Clássicos",nome:"Daiquiri",preco:53},{cat:"Drinks Clássicos",nome:"Dry Martini",preco:53},{cat:"Drinks Clássicos",nome:"Long Island Iced Tea",preco:53},{cat:"Drinks Clássicos",nome:"Mojito",preco:53},{cat:"Drinks Clássicos",nome:"Negroni",preco:53},{cat:"Drinks Clássicos",nome:"Old-fashioned",preco:53},{cat:"Drinks Clássicos",nome:"Maracujack",preco:53},{cat:"Drinks Clássicos",nome:"Jack Honey Lemonade",preco:53},{cat:"Drinks Clássicos",nome:"Jack Lemonade",preco:53},{cat:"Drinks Clássicos",nome:"Jack & Coke",preco:53},{cat:"Drinks Clássicos",nome:"Moscow Mule",preco:46},{cat:"Drinks Clássicos",nome:"Fitzgerald",preco:53},{cat:"Drinks Clássicos",nome:"Cuba Libre",preco:53},{cat:"Drinks Clássicos",nome:"Gentleman Souer",preco:51},{cat:"Drinks Clássicos",nome:"Moscow Mule Passion",preco:46},{cat:"Drinks Clássicos",nome:"Moscow Mule Tangerina",preco:46},{cat:"Drinks Clássicos",nome:"Manhattan",preco:53},{cat:"Drinks Clássicos",nome:"Bees Knees",preco:53},{cat:"Drinks Clássicos",nome:"Penicillin",preco:53},
-  {cat:"Caipirinhas",nome:"Grey Goose",preco:65},{cat:"Caipirinhas",nome:"Vodka Nacional",preco:52},{cat:"Caipirinhas",nome:"Salinissima (Cachaça)",preco:52},{cat:"Caipirinhas",nome:"Sake Thikará",preco:52},
-  {cat:"Shots",nome:"Bolinho da Vovó",preco:50},{cat:"Shots",nome:"Nai Mai",preco:50},{cat:"Shots",nome:"Calibre 12",preco:50},{cat:"Shots",nome:"Ballena",preco:50},{cat:"Shots",nome:"Licor 43",preco:50},{cat:"Shots",nome:"Banana Gold",preco:46},{cat:"Shots",nome:"Licor 43 Chocolate",preco:60},{cat:"Shots",nome:"Baileys",preco:50},{cat:"Shots",nome:"Moranguete",preco:52},{cat:"Shots",nome:"Don Luiz",preco:32},{cat:"Shots",nome:"Licor de Cacau Royal Charlotte",preco:50},
-  {cat:"Doses",nome:"Gin Premium Bombay",preco:48},{cat:"Doses",nome:"Gin Super Premium",preco:57},{cat:"Doses",nome:"Vodka Grey Goose",preco:53},{cat:"Doses",nome:"Jack Daniel's Old N7",preco:53},{cat:"Doses",nome:"Jack Daniel's Honey",preco:53},{cat:"Doses",nome:"Jack Daniels Apple",preco:53},{cat:"Doses",nome:"Jack Daniels Fire",preco:53},{cat:"Doses",nome:"Gentleman Jack",preco:57},{cat:"Doses",nome:"Jack Daniels Single Barrel",preco:62},{cat:"Doses",nome:"Woodford Reserve",preco:57},{cat:"Doses",nome:"JW Gold Label",preco:80},{cat:"Doses",nome:"JW Black Label",preco:57},{cat:"Doses",nome:"Chivas 12 anos",preco:57},{cat:"Doses",nome:"Reposado 100% Agave",preco:50},{cat:"Doses",nome:"El Rimador Blanca",preco:50},{cat:"Doses",nome:"Jägermeister dose",preco:53},{cat:"Doses",nome:"Jägermeister Bomb",preco:69},
-  {cat:"Garrafas",nome:"Garrafa Jägermeister",preco:770},{cat:"Garrafas",nome:"Jack Old N°7",preco:740},{cat:"Garrafas",nome:"Jack Honey",preco:740},{cat:"Garrafas",nome:"Jack Single Barrel",preco:990},{cat:"Garrafas",nome:"Woodford Reserve",preco:990},{cat:"Garrafas",nome:"Gentleman Jack",preco:990},{cat:"Garrafas",nome:"Chivas",preco:860},{cat:"Garrafas",nome:"Black Label",preco:860},{cat:"Garrafas",nome:"Gold Label",preco:1100},{cat:"Garrafas",nome:"Blue Label 750ml",preco:3190},{cat:"Garrafas",nome:"Royal Salute 21 anos",preco:2590},{cat:"Garrafas",nome:"Dewar's 15",preco:1100},{cat:"Garrafas",nome:"Dewar's 18",preco:2000},{cat:"Garrafas",nome:"Bacardi Carta Blanca",preco:555},{cat:"Garrafas",nome:"Grey Goose",preco:770},{cat:"Garrafas",nome:"Licor 43",preco:725},{cat:"Garrafas",nome:"Tanqueray Ten",preco:860},{cat:"Garrafas",nome:"Hendrick's",preco:790},
-  {cat:"Combos",nome:"Bombay + Tônica",preco:725},{cat:"Combos",nome:"Gin Bombay + Red Bull",preco:780},{cat:"Combos",nome:"Star of Bombay + Redbull",preco:970},{cat:"Combos",nome:"Hendricks + Tônicas",preco:845},{cat:"Combos",nome:"Grey Goose + Red Bull",preco:880},{cat:"Combos",nome:"Jack Nº7 + Red Bull",preco:850},{cat:"Combos",nome:"JW Gold + Red Bull",preco:1210},{cat:"Combos",nome:"JW Blue + Red Bull",preco:3300},{cat:"Combos",nome:"Royal Salute + Red Bull",preco:3300},
-  {cat:"Champagne",nome:"Dom Perignon Luminous",preco:3500},
-  {cat:"Espumantes",nome:"Chandon Brut",preco:415},{cat:"Espumantes",nome:"Chandon Rosé",preco:415},{cat:"Espumantes",nome:"Chandon Passion",preco:415},{cat:"Espumantes",nome:"Chandon Magnum 1,5L",preco:770},
-  {cat:"Vinhos",nome:"Malbec / Cabernet Sauvignon",preco:395},{cat:"Vinhos",nome:"Rosé Piscine",preco:415},{cat:"Vinhos",nome:"Branco / Chardonnay",preco:395},
-  {cat:"Cervejas",nome:"Heineken",preco:22},{cat:"Cervejas",nome:"Heineken Zero",preco:22},{cat:"Cervejas",nome:"Corona",preco:22},
-  {cat:"Soft Drinks",nome:"Água Mineral",preco:9},{cat:"Soft Drinks",nome:"Coca-Cola",preco:11},{cat:"Soft Drinks",nome:"Schweppes Tônica",preco:14},{cat:"Soft Drinks",nome:"Pink Lemonade St. Pierre",preco:17},{cat:"Soft Drinks",nome:"Água de Coco",preco:20},{cat:"Soft Drinks",nome:"Red Bull Energy Drink",preco:29},{cat:"Soft Drinks",nome:"Red Bull Sugar Free",preco:29},{cat:"Soft Drinks",nome:"Red Bull Tropical",preco:29},{cat:"Soft Drinks",nome:"Power Energy Drink",preco:25},
-  {cat:"Não Alcoólicos",nome:"Capim FreshH",preco:40},{cat:"Não Alcoólicos",nome:"Purple Fresh",preco:40},{cat:"Não Alcoólicos",nome:"Honey Fresh",preco:40},{cat:"Não Alcoólicos",nome:"Fresh Pink",preco:40},
-  {cat:"Sidras",nome:"Cereser Maçã Verde",preco:18},{cat:"Sidras",nome:"Cereser Sidra Original",preco:18},{cat:"Sidras",nome:"Cereser Sem Álcool",preco:18},
-];
-
-function renderCard() {
-  const cats = ['Todos',...[...new Set(MENU.map(d=>d.cat))]];
-  const ticket = Math.round(MENU.reduce((s,d)=>s+d.preco,0)/MENU.length);
-  const caro = MENU.reduce((a,b)=>b.preco>a.preco?b:a);
-  const catData = [...new Set(MENU.map(d=>d.cat))].map(c=>({c,max:Math.max(...MENU.filter(d=>d.cat===c).map(d=>d.preco))})).sort((a,b)=>b.max-a.max).slice(0,10);
-  const gmax = catData[0]?.max||1;
-
-  let rows = MENU.filter(d=>{
-    if(S.cardCat!=='Todos'&&d.cat!==S.cardCat) return false;
-    const q=el('card-q')?.value?.toLowerCase()||'';
-    if(q&&!d.nome.toLowerCase().includes(q)) return false;
+function renderProd(){
+  let rows=S.produtos.filter(p=>{
+    if(prodCat!=="Todos"&&p.categoria!==prodCat) return false;
+    if(prodQ&&!p.nome.toLowerCase().includes(prodQ.toLowerCase())) return false;
     return true;
-  });
-  if(S.cardSort==='nome') rows.sort((a,b)=>a.nome.localeCompare(b.nome));
-  if(S.cardSort==='desc') rows.sort((a,b)=>b.preco-a.preco);
-  if(S.cardSort==='asc')  rows.sort((a,b)=>a.preco-b.preco);
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
 
-  set('p-card',`
-    <div class="eyebrow">PRODUTOS & PREÇOS DE VENDA</div>
-    <div class="pg-t">Cardápio Mahau</div>
-    <div class="kpis">
-      ${kpiHTML('Total de Produtos', MENU.length, '20 categorias', '#e6edf3', '#2563eb')}
-      ${kpiHTML('Ticket Médio', Rf(ticket), 'preço médio', '#22c55e', '#22c55e')}
-      ${kpiHTML('Produto Mais Caro', Rf(caro.preco), caro.nome.slice(0,25), '#f59e0b', '#f59e0b')}
+  const formHTML=prodForm!==null?`<div class="fb">
+    <div class="ft">${prodForm.id?"Editar":"Novo"} Produto<button class="bi" onclick="prodForm=null;renderProd()">✕</button></div>
+    <div class="fg g3">
+      <div class="fi"><label>Nome do Produto</label><input id="pf-nome" value="${prodForm.nome||""}"></div>
+      <div class="fi"><label>Categoria</label><select id="pf-cat">
+        ${CATS_PROD.slice(1).map(c=>`<option${prodForm.categoria===c?" selected":""}>${c}</option>`).join("")}
+      </select></div>
+      <div class="fi"><label>Unidade</label><select id="pf-un">
+        ${["garrafa","lata","caixa","litro","kg","un"].map(u=>`<option${prodForm.unidade===u?" selected":""}>${u}</option>`).join("")}
+      </select></div>
     </div>
-    <div class="box">
-      <div class="bh"><span class="bt">Faixa de preço por categoria</span></div>
-      <div class="bb">${catData.map(({c,max})=>barRow(c,max,gmax,CC[c]||'#2563eb')).join('')}</div>
+    <div class="fg g4">
+      <div class="fi"><label>Capacidade (ml)</label><input id="pf-cap" type="number" value="${prodForm.capacidade_ml||""}"></div>
+      <div class="fi"><label>Custo Unitário (R$)</label><input id="pf-custo" type="number" value="${prodForm.preco_compra||""}"></div>
+      <div class="fi"><label>Preço Venda (R$)</label><input id="pf-venda" type="number" value="${prodForm.preco_venda||""}"></div>
+      <div class="fi"><label>Estoque Mínimo (un)</label><input id="pf-min" type="number" value="${prodForm.estoque_min||""}"></div>
     </div>
-    <div class="flt">
-      <div class="sw"><span class="si">🔍</span><input id="card-q" class="si-inp" placeholder="Buscar produto..." oninput="renderCard()"></div>
-      <div class="sbs">
-        <button class="sb2${S.cardSort==='nome'?' on':''}" onclick="S.cardSort='nome';renderCard()">A–Z</button>
-        <button class="sb2${S.cardSort==='desc'?' on':''}" onclick="S.cardSort='desc';renderCard()">MAIOR PREÇO</button>
-        <button class="sb2${S.cardSort==='asc'?' on':''}" onclick="S.cardSort='asc';renderCard()">MENOR PREÇO</button>
+    <div class="fg g2">
+      <div class="fi"><label>Estoque Inicial (un)</label><input id="pf-ini" type="number" value="${prodForm.estoque_inicial||""}"></div>
+      <div class="fi" style="justify-content:flex-end;flex-direction:row;align-items:flex-end;gap:8px">
+        <button class="btn bp" onclick="saveProd()">Salvar</button>
+        <button class="btn bg_" onclick="prodForm=null;renderProd()">Cancelar</button>
       </div>
     </div>
-    <div class="pills">${cats.map(c=>`<button class="pill${S.cardCat===c?' on':''}"
-      style="${S.cardCat===c&&c!=='Todos'?`background:${CC[c]||'#2563eb'};border-color:${CC[c]||'#2563eb'}`:''}"
-      onclick="S.cardCat='${c.replace(/'/g,"\\'")}';renderCard()">${c}</button>`).join('')}</div>
+  </div>`:"";
+
+  set("p-prod",`
+    <div class="pg-h">
+      <div><div class="eyebrow">CADASTRO CENTRAL</div><div class="pg-t">Produtos</div></div>
+      <button class="btn bp" onclick="prodForm={};renderProd()">+ Novo Produto</button>
+    </div>
+    ${formHTML}
+    <div class="flt">
+      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar produto..." value="${prodQ}" oninput="prodQ=this.value;renderProd()"></div>
+    </div>
+    <div class="pills">
+      ${CATS_PROD.map(c=>`<button class="pill${prodCat===c?" on":""}" onclick="prodCat='${c}';renderProd()">${c}</button>`).join("")}
+    </div>
     <div class="box">
-      <div class="bh"><span class="bt">${rows.length} produto${rows.length!==1?'s':''}</span></div>
+      <div class="bh"><span class="bt">${rows.length} produto${rows.length!==1?"s":""}</span></div>
       <div class="tw"><table>
-        <thead><tr><th>Categoria</th><th>Produto</th><th class="r">Preço de Venda</th></tr></thead>
-        <tbody>${rows.map(d=>`<tr>
-          <td><span class="badge" style="background:${CC[d.cat]||'#2563eb'}18;color:${CC[d.cat]||'#2563eb'}">${d.cat}</span></td>
-          <td style="font-weight:500">${d.nome}</td>
-          <td class="r mn" style="font-weight:600">${Rf(d.preco)}</td>
-        </tr>`).join('')}</tbody>
+        <thead><tr><th>Produto</th><th>Cat.</th><th class="r">Cap.</th><th class="r">Custo</th><th class="r">Venda</th><th class="r">Margem</th><th class="r">Mín.</th><th class="r">Atual</th><th></th></tr></thead>
+        <tbody>${rows.length?rows.map(p=>{
+          const atual=estoqueAtual(p.id);
+          const mg=p.preco_venda&&p.preco_compra?((p.preco_venda-p.preco_compra)/p.preco_venda):null;
+          const alr=atual<=(p.estoque_min||0);
+          return`<tr>
+            <td class="w6">${p.nome}</td>
+            <td class="mt">${p.categoria||""}</td>
+            <td class="r mn mt">${p.capacidade_ml||"—"}ml</td>
+            <td class="r mn">${p.preco_compra?Rf(p.preco_compra):"—"}</td>
+            <td class="r mn">${p.preco_venda?Rf(p.preco_venda):"—"}</td>
+            <td class="r">${mg!==null?chip(P(mg),mg>0.5?"#22c55e":mg>0.3?"#f59e0b":"#ef4444"):"—"}</td>
+            <td class="r mn">${p.estoque_min||0}</td>
+            <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${atual.toFixed(1)}</td>
+            <td style="white-space:nowrap">
+              <button class="bi" onclick="prodForm={...S.produtos.find(x=>x.id==='${p.id}')};renderProd()">✏</button>
+              <button class="bi" onclick="if(confirm('Excluir?'))FS.del('produtos','${p.id}')">✕</button>
+            </td>
+          </tr>`;
+        }).join(""):"<tr><td colspan='9' class='empty'>Nenhum produto cadastrado.</td></tr>"}
+        </tbody>
       </table></div>
     </div>
   `);
 }
 
-// ── EVENTOS ───────────────────────────────────────────────────────────────────
-const EV0={data:'',nome:'',publico:0,vips:0,bar:0,entrada:0,compras:0,sobras:0,vip_custo:0,desperdicio:0,dj:0,seguranca:0,staff:0,outros:0};
-let evForm = null;
+function saveProd(){
+  const d={
+    id:prodForm.id||null,
+    nome:sv("pf-nome"),categoria:sv("pf-cat"),unidade:sv("pf-un"),
+    capacidade_ml:nv("pf-cap"),preco_compra:nv("pf-custo"),
+    preco_venda:nv("pf-venda"),estoque_min:nv("pf-min"),estoque_inicial:nv("pf-ini"),
+  };
+  FS.save("produtos",d); prodForm=null;
+}
 
-function renderEventos() {
-  const calcs = S.eventos.map(e=>({...e,...calcEv(e)}));
-  const selC = calcs.find(e=>e.id===S.evSel);
-  const rat = rateio();
+// ── FICHAS TÉCNICAS ───────────────────────────────────────────────────────────
+let fichaForm=null, fichaQ="";
 
-  let dre = '';
-  if(selC) {
-    const rows=[
-      {l:'Receita Bruta',v:selC.rec,bold:true},
-      {l:'  Bar',v:selC.bar||0,sub:true},{l:'  Entrada',v:selC.entrada||0,sub:true},
-      {sep:true},
-      {l:'(–) CMV Bebidas',v:-selC.cmv,c:selC.cmvP>0.28?'#ef4444':'#22c55e'},
-      {l:'(–) Custo VIP',v:-(selC.vip_custo||0),c:'#f59e0b'},
-      {l:'(–) Desperdício',v:-(selC.desperdicio||0),c:'#484f58'},
-      {sep:true},
-      {l:'= Margem Bruta',v:selC.rec-selC.cmv-(selC.vip_custo||0)-(selC.desperdicio||0),bold:true},
-      {l:'(–) Custos Diretos',v:-selC.dir,c:'#8b949e'},
-      {l:'(–) Rateio Fixo',v:-rat,c:'#484f58'},
-      {sep:true},
-      {l:'Resultado Líquido',v:selC.res,bold:true,big:true,c:selC.res>0?'#22c55e':'#ef4444'},
-    ];
-    dre=`<div class="dre-box">
-      <div style="font-size:10px;color:#3b82f6;font-weight:600;margin-bottom:4px">DRE DO EVENTO</div>
-      <div style="font-weight:700;font-size:13px;margin-bottom:14px">${selC.nome}</div>
-      ${rows.map(r=>r.sep?`<div class="dre-sep"></div>`:`
-        <div class="dre-r${r.big?' bold':''}${r.bold?' bold':''}">
-          <span style="font-size:${r.big?12:10}px;color:${r.c||'#8b949e'};padding-left:${r.sub?12:0}px;font-weight:${r.bold?700:400}">${r.l}</span>
-          <span style="font-family:'Courier New';font-size:${r.big?15:11}px;font-weight:${r.bold?700:400};color:${r.c||(r.v<0?'#ef4444':'#e6edf3')}">${R(r.v)}</span>
-        </div>`).join('')}
-      <div style="background:#1c2332;border-radius:6px;padding:10px;margin-top:12px">
-        <div style="font-size:10px;color:#484f58;font-weight:600;margin-bottom:6px">PÚBLICO</div>
-        <div style="display:flex;gap:16px;font-family:'Courier New';font-size:12px">
-          <span>Total <strong>${selC.publico||0}</strong></span>
-          <span style="color:#f59e0b">VIP <strong>${selC.vips||0}</strong></span>
-          <span style="color:#22c55e">Pag. <strong>${(selC.publico||0)-(selC.vips||0)}</strong></span>
-        </div>
-      </div>
-    </div>`;
-  }
+function renderFichas(){
+  let rows=S.fichas.filter(f=>!fichaQ||f.nome.toLowerCase().includes(fichaQ.toLowerCase()))
+    .sort((a,b)=>a.nome.localeCompare(b.nome));
 
-  const formHTML = evForm!==null ? `<div class="fb" id="ev-form">
-    <div class="ft">${evForm.id?'Editar':'Novo'} Evento<button class="bi" onclick="evForm=null;renderEventos()">✕</button></div>
-    <div class="fg g4">
-      <div class="fi"><label>Data</label><input id="ef-data" value="${evForm.data||''}"></div>
-      <div class="fi"><label>Nome</label><input id="ef-nome" value="${evForm.nome||''}"></div>
-      <div class="fi"><label>Público Total</label><input id="ef-pub" type="number" value="${evForm.publico||''}"></div>
-      <div class="fi"><label>VIPs</label><input id="ef-vips" type="number" value="${evForm.vips||''}"></div>
-    </div>
-    <div class="slbl">Receitas</div>
-    <div class="fg g2">
-      <div class="fi"><label>Bar (total)</label><input id="ef-bar" type="number" value="${evForm.bar||''}"></div>
-      <div class="fi"><label>Entrada</label><input id="ef-ent" type="number" value="${evForm.entrada||''}"></div>
-    </div>
-    <div class="slbl">CMV & Desvios</div>
-    <div class="fg g4">
-      <div class="fi"><label>Compras da Noite</label><input id="ef-comp" type="number" value="${evForm.compras||''}"></div>
-      <div class="fi"><label>Sobras</label><input id="ef-sob" type="number" value="${evForm.sobras||''}"></div>
-      <div class="fi"><label>Custo VIP</label><input id="ef-vip" type="number" value="${evForm.vip_custo||''}"></div>
-      <div class="fi"><label>Desperdício</label><input id="ef-des" type="number" value="${evForm.desperdicio||''}"></div>
-    </div>
-    <div class="slbl">Custos da Noite</div>
-    <div class="fg g4">
-      <div class="fi"><label>DJ / Atração</label><input id="ef-dj" type="number" value="${evForm.dj||''}"></div>
-      <div class="fi"><label>Segurança</label><input id="ef-seg" type="number" value="${evForm.seguranca||''}"></div>
-      <div class="fi"><label>Staff Extra</label><input id="ef-sta" type="number" value="${evForm.staff||''}"></div>
-      <div class="fi"><label>Outros</label><input id="ef-out" type="number" value="${evForm.outros||''}"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bp" onclick="saveEv()">Salvar</button>
-      <button class="btn bg_" onclick="evForm=null;renderEventos()">Cancelar</button>
-    </div>
-  </div>` : '';
+  const formHTML=fichaForm!==null?renderFichaForm():"";
 
-  const listHTML = calcs.length ? calcs.map(e=>`
-    <div class="ec${e.id===S.evSel?' on':''}" onclick="S.evSel=S.evSel===e.id?null:'${e.id}';renderEventos()" id="ec-${e.id}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-size:10px;color:#484f58">${e.data||''}</div>
-          <div style="font-weight:700;font-size:14px">${e.nome||''}</div>
-          <div style="font-size:10px;color:#484f58;margin-top:2px">${e.publico||0} pessoas · ${e.vips||0} VIPs</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:'Courier New';font-weight:700;font-size:15px">${R(e.rec)}</div>
-          <div style="font-family:'Courier New';font-size:12px;color:${e.res>0?'#22c55e':'#ef4444'};margin-top:2px">${R(e.res)}</div>
-        </div>
-      </div>
-      <div class="ech">
-        ${chip('CMV '+P(e.cmvP),cCmv(e.cmvP))}
-        ${chip('VIP '+P(e.vipP),'#f59e0b')}
-        ${chip('Margem '+P(Math.max(0,e.mg)),e.mg>0.20?'#22c55e':e.mg>0.10?'#f59e0b':'#ef4444')}
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button class="btn bg_ bsm" onclick="event.stopPropagation();evForm={...S.eventos.find(x=>x.id==='${e.id}')};renderEventos()">Editar</button>
-          <button class="btn bd_ bsm" onclick="event.stopPropagation();if(confirm('Excluir?')){FS.del('eventos','${e.id}');if(S.evSel==='${e.id}')S.evSel=null;}">Excluir</button>
-        </div>
-      </div>
-    </div>`).join('') : '<div class="box"><div class="empty">Nenhum evento ainda. Clique em "+ Novo Evento".</div></div>';
-
-  set('p-eventos',`
+  set("p-fichas",`
     <div class="pg-h">
-      <div><div class="eyebrow">REGISTROS</div><div class="pg-t">Eventos & DRE</div></div>
-      <button class="btn bp" onclick="evForm={...EV0};renderEventos()">+ Novo Evento</button>
+      <div><div class="eyebrow">RECEITAS & ML</div><div class="pg-t">Fichas Técnicas</div></div>
+      <button class="btn bp" onclick="fichaForm={ingredientes:[]};renderFichas()">+ Nova Ficha</button>
     </div>
     ${formHTML}
-    <div class="${selC?'g2c':''}">
-      <div>${listHTML}</div>
-      ${selC?dre:''}
+    <div class="flt">
+      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar drink..." value="${fichaQ}" oninput="fichaQ=this.value;renderFichas()"></div>
+    </div>
+    <div class="box">
+      <div class="bh"><span class="bt">${rows.length} fichas cadastradas</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Drink</th><th>Categoria</th><th class="r">Venda</th><th class="r">Custo (CMV)</th><th class="r">Margem</th><th>Ingredientes</th><th></th></tr></thead>
+        <tbody>${rows.length?rows.map(f=>{
+          const custo=calcCustoFicha(f);
+          const mg=f.preco_venda&&custo?((f.preco_venda-custo)/f.preco_venda):null;
+          return`<tr>
+            <td class="w6">${f.nome}</td>
+            <td class="mt">${f.categoria||""}</td>
+            <td class="r mn">${f.preco_venda?Rf(f.preco_venda):"—"}</td>
+            <td class="r mn">${custo?Rf(custo):"—"}</td>
+            <td class="r">${mg!==null?chip(P(mg),mg>0.65?"#22c55e":mg>0.50?"#f59e0b":"#ef4444"):"—"}</td>
+            <td class="mt" style="font-size:10px">${(f.ingredientes||[]).map(i=>{
+              const p=S.produtos.find(x=>x.id===i.produto_id);
+              return p?`${p.nome} ${i.quantidade_ml}ml`:"?";
+            }).join(" · ")||"—"}</td>
+            <td style="white-space:nowrap">
+              <button class="bi" onclick="fichaForm={...JSON.parse(JSON.stringify(S.fichas.find(x=>x.id==='${f.id}')))};renderFichas()">✏</button>
+              <button class="bi" onclick="if(confirm('Excluir?'))FS.del('fichas','${f.id}')">✕</button>
+            </td>
+          </tr>`;
+        }).join(""):"<tr><td colspan='7' class='empty'>Nenhuma ficha cadastrada.</td></tr>"}
+        </tbody>
+      </table></div>
     </div>
   `);
 }
 
-function saveEv() {
-  const ev={
-    id:evForm.id||null,
-    data:sv('ef-data'), nome:sv('ef-nome'),
-    publico:nv('ef-pub'), vips:nv('ef-vips'),
-    bar:nv('ef-bar'), entrada:nv('ef-ent'),
-    compras:nv('ef-comp'), sobras:nv('ef-sob'),
-    vip_custo:nv('ef-vip'), desperdicio:nv('ef-des'),
-    dj:nv('ef-dj'), seguranca:nv('ef-seg'), staff:nv('ef-sta'), outros:nv('ef-out'),
+function calcCustoFicha(f){
+  if(!f.ingredientes||!f.ingredientes.length) return 0;
+  let c=0;
+  f.ingredientes.forEach(i=>{
+    const p=S.produtos.find(x=>x.id===i.produto_id);
+    if(p&&p.preco_compra&&p.capacidade_ml)
+      c+=(i.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
+  });
+  return c;
+}
+
+function renderFichaForm(){
+  const ings=fichaForm.ingredientes||[];
+  return`<div class="fb">
+    <div class="ft">${fichaForm.id?"Editar":"Nova"} Ficha Técnica<button class="bi" onclick="fichaForm=null;renderFichas()">✕</button></div>
+    <div class="fg g3">
+      <div class="fi"><label>Nome do Drink</label><input id="ff-nome" value="${fichaForm.nome||""}"></div>
+      <div class="fi"><label>Categoria</label><select id="ff-cat">
+        ${["Drinks Autorais","Gin Tônicas","Drinks Gin","Drinks Clássicos","Caipirinhas","Shots","Não Alcoólicos"].map(c=>`<option${fichaForm.categoria===c?" selected":""}>${c}</option>`).join("")}
+      </select></div>
+      <div class="fi"><label>Preço de Venda (R$)</label><input id="ff-venda" type="number" value="${fichaForm.preco_venda||""}"></div>
+    </div>
+    <div class="slbl">Ingredientes</div>
+    <div id="ff-ings">
+      ${ings.map((ing,i)=>`<div class="ing-row">
+        <select class="ing-sel" onchange="fichaForm.ingredientes[${i}].produto_id=this.value">
+          <option value="">-- produto --</option>
+          ${S.produtos.map(p=>`<option value="${p.id}"${ing.produto_id===p.id?" selected":""}>${p.nome}</option>`).join("")}
+        </select>
+        <input class="ing-ml" type="number" placeholder="ml" value="${ing.quantidade_ml||""}" oninput="fichaForm.ingredientes[${i}].quantidade_ml=parseFloat(this.value)||0">
+        <button class="bi" onclick="fichaForm.ingredientes.splice(${i},1);renderFichas()">✕</button>
+      </div>`).join("")}
+    </div>
+    <button class="btn bg_ bsm" style="margin-bottom:12px" onclick="fichaForm.ingredientes.push({produto_id:'',quantidade_ml:50});renderFichas()">+ Ingrediente</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn bp" onclick="saveFicha()">Salvar Ficha</button>
+      <button class="btn bg_" onclick="fichaForm=null;renderFichas()">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function saveFicha(){
+  const d={
+    id:fichaForm.id||null,
+    nome:sv("ff-nome"),categoria:sv("ff-cat"),preco_venda:nv("ff-venda"),
+    ingredientes:fichaForm.ingredientes||[],
   };
-  FS.save('eventos', ev);
-  evForm=null;
+  FS.save("fichas",d); fichaForm=null;
+}
+
+// ── ESTOQUE ───────────────────────────────────────────────────────────────────
+let estQ="",estCat="Todos";
+
+function renderEstoque(){
+  let rows=S.produtos.filter(p=>{
+    if(estCat!=="Todos"&&p.categoria!==estCat) return false;
+    if(estQ&&!p.nome.toLowerCase().includes(estQ.toLowerCase())) return false;
+    return true;
+  }).map(p=>({...p,atual:estoqueAtual(p.id)}))
+    .sort((a,b)=>{
+      const aa=a.atual<=(a.estoque_min||0)?0:1;
+      const bb=b.atual<=(b.estoque_min||0)?0:1;
+      return aa-bb||a.nome.localeCompare(b.nome);
+    });
+
+  const alrs=rows.filter(p=>p.atual<=(p.estoque_min||0));
+  const ok=rows.filter(p=>p.atual>(p.estoque_min||0));
+  const totalValor=rows.reduce((s,p)=>s+p.atual*(p.preco_compra||0),0);
+  const compMes=totalComprasMes();
+
+  set("p-estoque",`
+    <div class="eyebrow">SALDO ATUAL</div>
+    <div class="pg-t">Estoque</div>
+    <div class="kpis">
+      ${kpi("Produtos Cadastrados",S.produtos.length,"","#e6edf3","#2563eb")}
+      ${kpi("Valor em Estoque",R(totalValor),"estimado (custo)","#e6edf3","#3b82f6")}
+      ${kpi("Compras do Mês",R(compMes),"entradas registradas","#e6edf3","#8b5cf6")}
+      ${kpi("Alertas",alrs.length>0?alrs.length+"":"✓",alrs.length>0?"abaixo do mínimo":"Tudo em ordem",alrs.length>0?"#ef4444":"#22c55e",alrs.length>0?"#ef4444":"#22c55e")}
+    </div>
+    <div class="flt">
+      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar..." value="${estQ}" oninput="estQ=this.value;renderEstoque()"></div>
+    </div>
+    <div class="pills">
+      ${CATS_PROD.map(c=>`<button class="pill${estCat===c?" on":""}" onclick="estCat='${c}';renderEstoque()">${c}</button>`).join("")}
+    </div>
+    ${alrs.length?`<div class="alert-strip">⚠ ${alrs.length} produto${alrs.length>1?"s abaixo":" abaixo"} do mínimo</div>`:""}
+    <div class="box">
+      <div class="bh"><span class="bt">${rows.length} produtos</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th>Cat.</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Status</th><th class="r">Valor</th></tr></thead>
+        <tbody>${rows.map(p=>{
+          const alr=p.atual<=(p.estoque_min||0);
+          const status=alr?chip("⚠ Baixo","#ef4444"):chip("✓ OK","#22c55e");
+          return`<tr>
+            <td class="w6">${p.nome}</td>
+            <td class="mt">${p.categoria||""}</td>
+            <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${p.atual.toFixed(1)} ${p.unidade||"un"}</td>
+            <td class="r mn mt">${p.estoque_min||0} ${p.unidade||"un"}</td>
+            <td class="r">${status}</td>
+            <td class="r mn">${p.preco_compra?R(p.atual*(p.preco_compra||0)):"—"}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>
+  `);
 }
 
 // ── COMPRAS ───────────────────────────────────────────────────────────────────
-let cpForm = null;
+let cpForm=null;
 
-function renderCompras() {
-  const total = totalCompras();
-  const sems = ['S1','S2','S3','S4'].map(s=>({
-    s, items:S.compras.filter(c=>c.sem===s),
+function renderCompras(){
+  const totalMes=totalComprasMes();
+  const sems=["S1","S2","S3","S4"].map(s=>({
+    s,items:S.compras.filter(c=>c.sem===s),
     total:S.compras.filter(c=>c.sem===s).reduce((a,c)=>a+(c.total||0),0)
   })).filter(x=>x.items.length);
 
-  const formHTML = cpForm!==null ? `<div class="fb">
+  const formHTML=cpForm!==null?`<div class="fb">
     <div class="ft">Nova Compra<button class="bi" onclick="cpForm=null;renderCompras()">✕</button></div>
-    <div class="fg" style="grid-template-columns:70px 80px 1fr 60px 90px 90px 1fr;gap:8px;margin-bottom:12px">
-      <div class="fi"><label>Semana</label><select id="cp-sem">${['S1','S2','S3','S4'].map(s=>`<option>${s}</option>`).join('')}</select></div>
+    <div class="fg g3">
+      <div class="fi"><label>Produto</label><select id="cp-prod">
+        <option value="">-- selecione --</option>
+        ${S.produtos.sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}">${p.nome}</option>`).join("")}
+      </select></div>
+      <div class="fi"><label>Semana</label><select id="cp-sem">${["S1","S2","S3","S4"].map(s=>`<option>${s}</option>`).join("")}</select></div>
       <div class="fi"><label>Data</label><input id="cp-data" placeholder="15/05"></div>
-      <div class="fi"><label>Produto</label><input id="cp-prod"></div>
-      <div class="fi"><label>Qtd</label><input id="cp-qtd" type="number" oninput="calcCpTot()"></div>
-      <div class="fi"><label>Custo Unit.</label><input id="cp-cu" type="number" oninput="calcCpTot()"></div>
-      <div class="fi"><label>Total R$</label><input id="cp-tot" type="number"></div>
+    </div>
+    <div class="fg g3">
+      <div class="fi"><label>Quantidade (un)</label><input id="cp-qtd" type="number" oninput="calcCpTot()"></div>
+      <div class="fi"><label>Custo Unit. (R$)</label><input id="cp-cu" type="number" oninput="calcCpTot()"></div>
+      <div class="fi"><label>Total (R$)</label><input id="cp-tot" type="number"></div>
+    </div>
+    <div class="fg g2">
       <div class="fi"><label>Fornecedor</label><input id="cp-forn"></div>
+      <div class="fi" style="flex-direction:row;align-items:flex-end;gap:8px">
+        <button class="btn bp" onclick="saveCp()">Salvar</button>
+        <button class="btn bg_" onclick="cpForm=null;renderCompras()">Cancelar</button>
+      </div>
     </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bp" onclick="saveCp()">Salvar</button>
-      <button class="btn bg_" onclick="cpForm=null;renderCompras()">Cancelar</button>
-    </div>
-  </div>` : '';
+  </div>`:"";
 
-  set('p-compras',`
+  set("p-compras",`
     <div class="pg-h">
-      <div><div class="eyebrow">ENTRADAS DE ESTOQUE</div><div class="pg-t">Compras Semanais</div></div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <div class="box" style="margin:0;padding:8px 16px;text-align:right">
+      <div><div class="eyebrow">ENTRADAS DE ESTOQUE</div><div class="pg-t">Compras</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="box" style="margin:0;padding:8px 14px;text-align:right">
           <div style="font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px">TOTAL MÊS</div>
-          <div style="font-family:'Courier New';font-size:16px;font-weight:700;margin-top:2px">${R(total)}</div>
+          <div style="font-family:monospace;font-size:15px;font-weight:700;margin-top:1px">${R(totalMes)}</div>
         </div>
         <button class="btn bp" onclick="cpForm={};renderCompras()">+ Nova Compra</button>
       </div>
     </div>
     ${formHTML}
-    ${sems.length ? sems.map(({s,items,total})=>`
+    ${sems.length?sems.map(({s,items,total})=>`
       <div class="wb">
-        <div class="wh"><span style="font-size:11px;font-weight:700;color:#8b949e">SEMANA ${s.replace('S','')}</span><span style="font-family:'Courier New';font-weight:700;font-size:13px">${R(total)}</span></div>
+        <div class="wh"><span style="font-size:11px;font-weight:700;color:#8b949e">SEMANA ${s.replace("S","")}</span><span style="font-family:monospace;font-weight:700;font-size:13px">${R(total)}</span></div>
         <div class="tw"><table>
-          <thead><tr><th>Data</th><th>Produto</th><th class="r">Qtd</th><th class="r">Unit.</th><th class="r">Total</th><th>Fornecedor</th><th></th></tr></thead>
-          <tbody>${items.map(c=>`<tr>
-            <td class="mn mt">${c.data||''}</td><td>${c.produto||''}</td>
-            <td class="r mn">${c.qtd||0}</td>
-            <td class="r mn mt">${Rf(c.cu)}</td>
-            <td class="r mn" style="font-weight:600">${R(c.total)}</td>
-            <td class="mt">${c.forn||''}</td>
-            <td><button class="bi" onclick="FS.del('compras','${c.id}')">✕</button></td>
-          </tr>`).join('')}</tbody>
+          <thead><tr><th>Produto</th><th>Data</th><th class="r">Qtd</th><th class="r">Unit.</th><th class="r">Total</th><th>Fornecedor</th><th></th></tr></thead>
+          <tbody>${items.map(c=>{
+            const p=S.produtos.find(x=>x.id===c.produto_id);
+            return`<tr>
+              <td class="w6">${p?p.nome:c.produto_id||"—"}</td>
+              <td class="mn mt">${c.data||""}</td>
+              <td class="r mn">${c.qtd||0}</td>
+              <td class="r mn mt">${c.custo_unit?Rf(c.custo_unit):"—"}</td>
+              <td class="r mn w6">${R(c.total)}</td>
+              <td class="mt">${c.forn||""}</td>
+              <td><button class="bi" onclick="if(confirm('Excluir?'))FS.del('compras','${c.id}')">✕</button></td>
+            </tr>`;
+          }).join("")}</tbody>
         </table></div>
-      </div>`).join('') : '<div class="box"><div class="empty">Nenhuma compra registrada ainda.</div></div>'}
+      </div>`).join(""):`<div class="box"><div class="empty">Nenhuma compra registrada ainda.</div></div>`}
   `);
 }
 
 function calcCpTot(){
-  const q=parseFloat(el('cp-qtd')?.value)||0,u=parseFloat(el('cp-cu')?.value)||0,t=el('cp-tot');
-  if(t)t.value=q*u||'';
+  const q=parseFloat(el("cp-qtd")?.value)||0;
+  const u=parseFloat(el("cp-cu")?.value)||0;
+  const t=el("cp-tot"); if(t&&q&&u) t.value=(q*u).toFixed(2);
 }
+
 function saveCp(){
-  FS.save('compras',{id:null,sem:sv('cp-sem'),data:sv('cp-data'),produto:sv('cp-prod'),qtd:nv('cp-qtd'),cu:nv('cp-cu'),total:nv('cp-tot'),forn:sv('cp-forn')});
+  const pid=sv("cp-prod");
+  if(!pid){alert("Selecione um produto");return;}
+  const p=S.produtos.find(x=>x.id===pid);
+  const qtd=nv("cp-qtd");
+  const cu=nv("cp-cu")||(p?p.preco_compra:0);
+  FS.save("compras",{
+    id:null,produto_id:pid,sem:sv("cp-sem"),
+    data:sv("cp-data"),qtd,custo_unit:cu,
+    total:nv("cp-tot")||qtd*cu,forn:sv("cp-forn"),
+  });
   cpForm=null;
 }
 
+// ── EVENTOS ───────────────────────────────────────────────────────────────────
+let evForm=null,evSel=null,evVendaEv=null;
+const EV0={data:"",nome:"",publico:0,vips:0,entrada:0,dj:0,seguranca:0,staff:0,outros:0};
+
+function renderEventos(){
+  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const selC=calcs.find(e=>e.id===evSel);
+
+  const formHTML=evForm!==null?`<div class="fb">
+    <div class="ft">${evForm.id?"Editar":"Novo"} Evento<button class="bi" onclick="evForm=null;renderEventos()">✕</button></div>
+    <div class="fg g4">
+      <div class="fi"><label>Data</label><input id="ef-data" value="${evForm.data||""}"></div>
+      <div class="fi"><label>Nome</label><input id="ef-nome" value="${evForm.nome||""}"></div>
+      <div class="fi"><label>Público</label><input id="ef-pub" type="number" value="${evForm.publico||""}"></div>
+      <div class="fi"><label>VIPs</label><input id="ef-vips" type="number" value="${evForm.vips||""}"></div>
+    </div>
+    <div class="slbl">Receita</div>
+    <div class="fg g2">
+      <div class="fi"><label>Entrada / Cover (R$)</label><input id="ef-ent" type="number" value="${evForm.entrada||""}"></div>
+    </div>
+    <div class="slbl">Custos Diretos da Noite</div>
+    <div class="fg g4">
+      <div class="fi"><label>DJ / Atração</label><input id="ef-dj" type="number" value="${evForm.dj||""}"></div>
+      <div class="fi"><label>Segurança</label><input id="ef-seg" type="number" value="${evForm.seguranca||""}"></div>
+      <div class="fi"><label>Staff</label><input id="ef-sta" type="number" value="${evForm.staff||""}"></div>
+      <div class="fi"><label>Outros</label><input id="ef-out" type="number" value="${evForm.outros||""}"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bp" onclick="saveEv()">Salvar</button>
+      <button class="btn bg_" onclick="evForm=null;renderEventos()">Cancelar</button>
+    </div>
+  </div>`:"";
+
+  const listHTML=calcs.length?calcs.map(e=>`
+    <div class="ev-card${e.id===evSel?" on":""}" onclick="evSel=evSel===e.id?null:'${e.id}';renderEventos()">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:10px;color:#484f58">${e.data||""}</div>
+          <div style="font-weight:700;font-size:14px">${e.nome||""}</div>
+          <div style="font-size:10px;color:#484f58;margin-top:2px">${e.publico||0} pessoas · ${e.vips||0} VIPs</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:monospace;font-weight:700;font-size:15px">${R(e.rec)}</div>
+          <div style="font-family:monospace;font-size:12px;color:${e.res>0?"#22c55e":"#ef4444"};margin-top:2px">${R(e.res)}</div>
+        </div>
+      </div>
+      <div class="ech">
+        ${chip("CMV "+P(e.cmvP),e.cmvP>0.30?"#ef4444":e.cmvP>0.28?"#f59e0b":"#22c55e")}
+        ${chip("Margem "+P(Math.max(0,e.mg)),e.mg>0.20?"#22c55e":e.mg>0.10?"#f59e0b":"#ef4444")}
+        <div style="margin-left:auto;display:flex;gap:5px">
+          <button class="btn bg_ bsm" onclick="event.stopPropagation();evVendaEv=evSel===e.id?e.id:e.id;evSel=e.id;renderEventos()">📋 Vendas</button>
+          <button class="btn bg_ bsm" onclick="event.stopPropagation();evForm={...S.eventos.find(x=>x.id==='${e.id}')};renderEventos()">✏</button>
+          <button class="btn bd_ bsm" onclick="event.stopPropagation();if(confirm('Excluir?')){FS.del('eventos','${e.id}');if(evSel==='${e.id}')evSel=null;}">✕</button>
+        </div>
+      </div>
+    </div>`).join(""):`<div class="box"><div class="empty">Nenhum evento. Clique em "+ Novo Evento".</div></div>`;
+
+  const vendaHTML=selC?renderVendasEvento(selC):"";
+  const dreHTML=selC?renderDRE(selC):"";
+
+  set("p-eventos",`
+    <div class="pg-h">
+      <div><div class="eyebrow">GESTÃO DE NOITES</div><div class="pg-t">Eventos</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn bg_" onclick="el('zig-import-box').classList.toggle('hidden')">⬆ Importar ZigPay</button>
+        <button class="btn bp" onclick="evForm={...EV0};renderEventos()">+ Novo Evento</button>
+      </div>
+    </div>
+    <div id="zig-import-box" class="hidden fb" style="margin-bottom:12px">
+      <div class="ft">Importar Relatório ZigPay <button class="bi" onclick="el('zig-import-box').classList.add('hidden')">✕</button></div>
+      <div style="font-size:11px;color:#484f58;margin-bottom:12px">
+        Exporte o relatório <strong>Total de produtos vendidos</strong> do ZigPay e importe aqui.<br>
+        Bar + Alimentos → Receita Bar · Serviços/Taxa → Entrada · Rider/Souvenir → ignorados
+      </div>
+      <div class="fg g2">
+        <div class="fi"><label>Data do Evento</label><input id="zig-data" placeholder="17/05"></div>
+        <div class="fi"><label>Nome do Evento</label><input id="zig-nome" placeholder="Sábado Premium"></div>
+      </div>
+      <div class="fg g4">
+        <div class="fi"><label>Público Total</label><input id="zig-pub" type="number" placeholder="0"></div>
+        <div class="fi"><label>VIPs</label><input id="zig-vips" type="number" placeholder="0"></div>
+        <div class="fi"><label>DJ / Atração</label><input id="zig-dj" type="number" placeholder="0"></div>
+        <div class="fi"><label>Segurança</label><input id="zig-seg" type="number" placeholder="0"></div>
+      </div>
+      <div class="fg g2">
+        <div class="fi"><label>Staff</label><input id="zig-sta" type="number" placeholder="0"></div>
+        <div class="fi"><label>Outros custos diretos</label><input id="zig-out" type="number" placeholder="0"></div>
+      </div>
+      <div class="fi" style="margin-bottom:12px">
+        <label>Arquivo Excel do ZigPay</label>
+        <input type="file" id="zig-file" accept=".xlsx,.xls" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+      </div>
+      <div id="zig-preview" style="font-size:11px;color:#484f58;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bp" onclick="importZigPay()">Importar e Criar Evento</button>
+        <button class="btn bg_" onclick="el('zig-import-box').classList.add('hidden')">Cancelar</button>
+      </div>
+    </div>
+    ${formHTML}
+    ${listHTML}
+    ${dreHTML}
+    ${vendaHTML}
+  `);
+}
+
+function renderDRE(e){
+  const {cmv,rec_bar}=cmvEvento(e.id);
+  const rec=rec_bar+(e.entrada||0);
+  const dir=(e.dj||0)+(e.seguranca||0)+(e.staff||0)+(e.outros||0);
+  const rat=rateio();
+  const mgBruta=rec-cmv;
+  const res=rec-cmv-dir-rat;
+  const rows=[
+    {l:"Receita Bruta",v:rec,bold:true},
+    {l:"  Bar (vendas registradas)",v:rec_bar,sub:true},
+    {l:"  Entrada / Cover",v:e.entrada||0,sub:true},
+    {sep:true},
+    {l:"(–) CMV (custo das vendas+cortesias)",v:-cmv,c:rec&&cmv/rec>0.28?"#ef4444":"#22c55e"},
+    {sep:true},
+    {l:"= Margem Bruta",v:mgBruta,bold:true},
+    {l:"(–) Custos Diretos",v:-dir,c:"#8b949e"},
+    {l:"(–) Rateio Fixo",v:-rat,c:"#484f58"},
+    {sep:true},
+    {l:"Resultado Líquido",v:res,bold:true,big:true,c:res>0?"#22c55e":"#ef4444"},
+  ];
+  return`<div class="dre-box">
+    <div style="font-size:10px;color:#3b82f6;font-weight:600;margin-bottom:4px">DRE — ${e.nome||""}</div>
+    ${rows.map(r=>r.sep?`<div class="dre-sep"></div>`:`
+      <div class="dre-r${r.bold?" bold":""}">
+        <span style="font-size:${r.big?12:10}px;color:${r.c||"#8b949e"};padding-left:${r.sub?12:0}px;font-weight:${r.bold?700:400}">${r.l}</span>
+        <span style="font-family:monospace;font-size:${r.big?15:11}px;font-weight:${r.bold?700:400};color:${r.c||(r.v<0?"#ef4444":"#e6edf3")}">${R(r.v)}</span>
+      </div>`).join("")}
+  </div>`;
+}
+
+function renderVendasEvento(e){
+  const vendas=S.evento_vendas.filter(v=>v.evento_id===e.id);
+  const allItems=[
+    ...S.fichas.map(f=>({tipo:"ficha",id:f.id,nome:f.nome,cat:f.categoria,preco:f.preco_venda})),
+    ...S.produtos.map(p=>({tipo:"produto",id:p.id,nome:p.nome,cat:p.categoria,preco:p.preco_venda})),
+  ].sort((a,b)=>a.nome.localeCompare(b.nome));
+
+  return`<div class="box" style="margin-top:10px">
+    <div class="bh"><span class="bt">📋 Registro de Vendas — ${e.nome}</span>
+      <button class="btn bp bsm" onclick="addVenda('${e.id}')">+ Adicionar Item</button>
+    </div>
+    <div id="venda-form-${e.id}"></div>
+    <div class="tw"><table>
+      <thead><tr><th>Item</th><th>Tipo</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">CMV</th><th class="r">Receita</th><th></th></tr></thead>
+      <tbody>${vendas.length?vendas.map(v=>{
+        const item=v.tipo==="ficha"?S.fichas.find(x=>x.id===v.item_id):S.produtos.find(x=>x.id===v.item_id);
+        if(!item) return"";
+        const qtdT=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
+        let cmvI=0,recI=0;
+        if(v.tipo==="produto"){
+          cmvI=qtdT*(item.preco_compra||0);
+          recI=(v.qtd_vendida||0)*(item.preco_venda||0);
+        } else {
+          cmvI=calcCustoFicha(item)*qtdT;
+          recI=(v.qtd_vendida||0)*(item.preco_venda||0);
+        }
+        return`<tr>
+          <td class="w6">${item.nome}</td>
+          <td>${chip(v.tipo==="ficha"?"drink":"produto",v.tipo==="ficha"?"#2563eb":"#8b5cf6")}</td>
+          <td class="r mn">${v.qtd_vendida||0}</td>
+          <td class="r mn" style="color:${(v.qtd_cortesia||0)>0?"#f59e0b":"#484f58"}">${v.qtd_cortesia||0}</td>
+          <td class="r mn">${Rf(cmvI)}</td>
+          <td class="r mn">${Rf(recI)}</td>
+          <td><button class="bi" onclick="if(confirm('Excluir?'))FS.del('evento_vendas','${v.id}')">✕</button></td>
+        </tr>`;
+      }).join(""):`<tr><td colspan="7" class="empty">Nenhuma venda registrada. Clique em "+ Adicionar Item".</td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function addVenda(eid){
+  const allItems=[
+    ...S.fichas.map(f=>({tipo:"ficha",id:f.id,nome:f.nome+"  (drink)"})),
+    ...S.produtos.map(p=>({tipo:"produto",id:p.id,nome:p.nome+"  (produto)"})),
+  ].sort((a,b)=>a.nome.localeCompare(b.nome));
+
+  const d=el("venda-form-"+eid); if(!d) return;
+  d.innerHTML=`<div class="fb" style="margin:10px">
+    <div class="ft">Adicionar Venda<button class="bi" onclick="el('venda-form-${eid}').innerHTML=''">✕</button></div>
+    <div class="fg g3">
+      <div class="fi"><label>Item</label><select id="vf-item">
+        <option value="">-- selecione --</option>
+        ${allItems.map(i=>`<option value="${i.tipo}::${i.id}">${i.nome}</option>`).join("")}
+      </select></div>
+      <div class="fi"><label>Qtd Vendida</label><input id="vf-vend" type="number" value="0"></div>
+      <div class="fi"><label>Qtd Cortesia</label><input id="vf-cort" type="number" value="0"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bp" onclick="saveVenda('${eid}')">Salvar</button>
+      <button class="btn bg_" onclick="el('venda-form-${eid}').innerHTML=''">Cancelar</button>
+    </div>
+  </div>`;
+}
+
+function saveVenda(eid){
+  const raw=sv("vf-item"); if(!raw){alert("Selecione um item");return;}
+  const [tipo,item_id]=raw.split("::");
+  FS.save("evento_vendas",{
+    id:null,evento_id:eid,tipo,item_id,
+    qtd_vendida:nv("vf-vend"),qtd_cortesia:nv("vf-cort"),
+  });
+  const d=el("venda-form-"+eid); if(d) d.innerHTML="";
+}
+
+function saveEv(){
+  const d={
+    id:evForm.id||null,
+    data:sv("ef-data"),nome:sv("ef-nome"),
+    publico:nv("ef-pub"),vips:nv("ef-vips"),
+    entrada:nv("ef-ent"),dj:nv("ef-dj"),
+    seguranca:nv("ef-seg"),staff:nv("ef-sta"),outros:nv("ef-out"),
+  };
+  FS.save("eventos",d); evForm=null;
+}
+
+
 // ── CUSTOS FIXOS ──────────────────────────────────────────────────────────────
-function renderCustos() {
+
+function setDatasNoMes(n){
+  n = Math.max(1, Math.min(20, parseInt(n)||1));
+  S.config = {...S.config, datasNoMes:n};
+  render();
+  if(db) db.collection('config').doc('settings').set({...S.config, datasNoMes:n},{merge:true});
+}
+
+function renderCustos(){
   const tf=totalFixo(), rat=rateio();
-  set('p-custos',`
-    <div class="eyebrow">ESTRUTURA</div>
-    <div class="pg-t">Custos Fixos Mensais</div>
+  set("p-custos",`
+    <div class="eyebrow">ESTRUTURA MENSAL</div>
+    <div class="pg-t">Custos Fixos</div>
     <div class="kpis">
-      ${kpiHTML('Total Fixo / Mês', R(tf), '', '#e6edf3', '#2563eb')}
-      ${kpiHTML('Rateio por Evento', R(rat), '÷ '+S.config.datasNoMes+' eventos', '#e6edf3', '#3b82f6')}
+      ${kpi("Total Fixo / Mês",R(tf),"","#e6edf3","#2563eb")}
+      ${kpi("Rateio por Evento",R(rat),"÷ "+S.config.datasNoMes+" eventos","#e6edf3","#3b82f6")}
       <div class="kpi" style="border-top:2px solid #21262d">
-        <div class="kpi-l">Eventos / Mês</div>
+        <div class="kpi-l">EVENTOS / MÊS</div>
         <div class="ctr" style="margin-top:8px">
-          <button class="cb" onclick="FS.setDoc('config','settings',{...S.config,datasNoMes:Math.max(1,S.config.datasNoMes-1)})">–</button>
+          <button class="cb" onclick="setDatasNoMes(S.config.datasNoMes-1)">–</button>
           <span class="cv">${S.config.datasNoMes}</span>
-          <button class="cb" onclick="FS.setDoc('config','settings',{...S.config,datasNoMes:S.config.datasNoMes+1})">+</button>
+          <button class="cb" onclick="setDatasNoMes(S.config.datasNoMes+1)">+</button>
         </div>
       </div>
     </div>
     <div class="fb">
-      <div style="font-weight:600;margin-bottom:12px;font-size:13px">Adicionar custo fixo</div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-        <div class="fi" style="flex:2;min-width:160px"><label>Nome do Custo</label><input id="cf-nome" placeholder="Ex: Marketing"></div>
-        <div class="fi" style="flex:1;min-width:120px"><label>Valor Mensal (R$)</label><input id="cf-val" type="number" placeholder="0"></div>
+      <div style="font-weight:600;margin-bottom:10px;font-size:13px">Adicionar custo fixo</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div class="fi" style="flex:2;min-width:150px"><label>Nome do Custo</label><input id="cf-nome" placeholder="Ex: Aluguel"></div>
+        <div class="fi" style="flex:1;min-width:110px"><label>Valor Mensal (R$)</label><input id="cf-val" type="number" placeholder="0"></div>
         <button class="btn bp" onclick="addCusto()">+ Adicionar</button>
       </div>
     </div>
     <div class="box"><div class="tw"><table>
-      <thead><tr><th>Custo</th><th class="r">Mensal</th><th class="r">Rateio</th><th class="r">Part.%</th><th></th></tr></thead>
+      <thead><tr><th>Custo</th><th class="r">Mensal</th><th class="r">Rateio/Evento</th><th class="r">Part.%</th><th></th></tr></thead>
       <tbody>
-        ${S.custos.map(c=>`<tr>
-          <td style="font-weight:500">${c.nome}</td>
+        ${S.custos.length?S.custos.map(c=>`<tr>
+          <td class="w6">${c.nome}</td>
           <td class="r mn">${R(c.valor)}</td>
           <td class="r mn mt">${R((c.valor||0)/S.config.datasNoMes)}</td>
-          <td class="r"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><div class="prog"><div class="pf" style="width:${tf?(c.valor/tf*100).toFixed(1):0}%"></div></div><span style="font-family:'Courier New';font-size:10px;color:#484f58">${P(tf?c.valor/tf:0)}</span></div></td>
-          <td><button class="bi" onclick="FS.del('custos','${c.id}')">✕</button></td>
-        </tr>`).join('')}
-        <tr class="tr-tot"><td>Total</td><td class="r mn" style="font-size:15px">${R(tf)}</td><td class="r mn">${R(rat)}</td><td></td><td></td></tr>
+          <td class="r">
+            <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">
+              <div class="prog"><div class="pf" style="width:${tf?(c.valor/tf*100).toFixed(1):0}%"></div></div>
+              <span style="font-family:monospace;font-size:10px;color:#484f58">${P(tf?c.valor/tf:0)}</span>
+            </div>
+          </td>
+          <td><button class="bi" onclick="if(confirm('Excluir?'))FS.del('custos','${c.id}')">✕</button></td>
+        </tr>`).join(""):`<tr><td colspan="5" class="empty">Nenhum custo fixo cadastrado.</td></tr>`}
+        ${S.custos.length?`<tr class="tr-tot">
+          <td>Total</td>
+          <td class="r mn" style="font-size:15px">${R(tf)}</td>
+          <td class="r mn">${R(rat)}</td>
+          <td></td><td></td>
+        </tr>`:""}
       </tbody>
     </table></div></div>
   `);
 }
 
-function addCusto() {
-  const nome=sv('cf-nome').trim(), valor=parseFloat(el('cf-val')?.value)||0;
+function addCusto(){
+  const nome=el("cf-nome")?.value.trim();
+  const valor=parseFloat(el("cf-val")?.value)||0;
   if(!nome||!valor) return;
-  FS.save('custos',{id:'c_'+Date.now(),nome,valor});
+  FS.save("custos",{id:"c_"+Date.now(),nome,valor});
+  el("cf-nome").value=""; el("cf-val").value="";
 }
 
-// ── ESTOQUE / CMV ─────────────────────────────────────────────────────────────
-let estEdit = false;
-
-function renderEstoque() {
+// ── CMV ───────────────────────────────────────────────────────────────────────
+function renderCMV(){
   const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
-  const tConsumo=calcs.reduce((s,e)=>s+Math.max(0,(e.compras||0)-(e.sobras||0)),0);
-  const tVip=calcs.reduce((s,e)=>s+(e.vip_custo||0),0);
-  const tDesp=calcs.reduce((s,e)=>s+(e.desperdicio||0),0);
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
-  const tComp=totalCompras();
-  const estAtu=Math.max(0,(S.config.estoqueInicial||0)+tComp-tConsumo);
-  const cmvBebP=tRec?tConsumo/tRec:0;
-  const cmvTotP=tRec?(tConsumo+tVip+tDesp)/tRec:0;
-  const gColor=cmvBebP>0.30?'#ef4444':cmvBebP>0.28?'#f59e0b':'#22c55e';
+  const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
 
-  const eq=[
-    {l:'Est. Inicial',v:S.config.estoqueInicial||0,c:'#3b82f6'},{op:'+'},{l:'Compras Mês',v:tComp,c:'#e6edf3'},
-    {op:'–'},{l:'Consumido',v:tConsumo,c:'#f59e0b'},{op:'='},{l:'Est. Atual (est.)',v:estAtu,c:estAtu>0?'#22c55e':'#ef4444'}
-  ];
-  const bd=[
-    {l:'CMV Bebidas',v:tConsumo,p:cmvBebP,c:'#3b82f6'},
-    {l:'Custo VIP',v:tVip,p:tRec?tVip/tRec:0,c:'#f59e0b'},
-    {l:'Desperdício',v:tDesp,p:tRec?tDesp/tRec:0,c:'#ef4444'},
-  ];
+  // CMV por produto (aggregated)
+  const porProd={};
+  S.evento_vendas.forEach(v=>{
+    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
+    const qv=v.qtd_vendida||0,qc=v.qtd_cortesia||0;
+    if(v.tipo==="produto"){
+      const p=S.produtos.find(x=>x.id===v.item_id);
+      if(!p) return;
+      if(!porProd[p.id]) porProd[p.id]={nome:p.nome,cat:p.categoria,cmv:0,vendido:0,cortesia:0,receita:0};
+      porProd[p.id].cmv+=qtd*(p.preco_compra||0);
+      porProd[p.id].vendido+=qv;
+      porProd[p.id].cortesia+=qc;
+      porProd[p.id].receita+=qv*(p.preco_venda||0);
+    }
+    if(v.tipo==="ficha"){
+      const f=S.fichas.find(x=>x.id===v.item_id);
+      if(!f||!f.ingredientes) return;
+      f.ingredientes.forEach(ing=>{
+        const p=S.produtos.find(x=>x.id===ing.produto_id);
+        if(!p||!p.preco_compra||!p.capacidade_ml) return;
+        const custo=qtd*(ing.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
+        if(!porProd[p.id]) porProd[p.id]={nome:p.nome,cat:p.categoria,cmv:0,vendido:0,cortesia:0,receita:0,via_ficha:true};
+        porProd[p.id].cmv+=custo;
+      });
+      if(!porProd["ficha_"+f.id]) porProd["ficha_"+f.id]={nome:f.nome+"  (drink)",cat:f.categoria,cmv:0,vendido:0,cortesia:0,receita:0,is_ficha:true};
+      porProd["ficha_"+f.id].vendido+=qv;
+      porProd["ficha_"+f.id].cortesia+=qc;
+      porProd["ficha_"+f.id].receita+=qv*(f.preco_venda||0);
+      porProd["ficha_"+f.id].cmv+=calcCustoFicha(f)*qtd;
+    }
+  });
 
-  set('p-estoque',`
-    <div class="eyebrow">CONTROLE DE CMV</div>
-    <div class="pg-t">Estoque & CMV Mensal</div>
-    <div class="box">
-      <div class="bh"><span class="bt">Equação do CMV</span></div>
-      <div class="bb"><div class="eq-wrap">
-        ${eq.map(i=>i.op?`<div style="font-size:20px;color:#484f58;padding:0 2px">${i.op}</div>`:`
-          <div class="eq-c" style="border-left-color:${i.c}"><div class="eq-l">${i.l}</div><div class="eq-v" style="color:${i.c}">${R(i.v)}</div></div>`).join('')}
-      </div></div>
-    </div>
-    <div class="gr2">
-      <div class="box" style="margin:0">
-        <div class="bh"><span class="bt">Breakdown do CMV</span></div>
-        <div class="bb">
-          ${bd.map(r=>`<div class="br-row">
-            <div class="br-m"><span style="color:#8b949e">${r.l}</span>
-            <div style="display:flex;gap:10px;align-items:center"><span style="font-family:'Courier New';font-size:10px;color:#484f58">${P(r.p)}</span><span style="font-family:'Courier New';font-weight:600;color:${r.c}">${R(r.v)}</span></div></div>
-            <div class="br-t"><div class="br-f" style="width:${Math.min(100,(r.p/0.40)*100).toFixed(1)}%;background:${r.c};opacity:.8"></div></div>
-          </div>`).join('')}
-          <div style="border-top:1px solid #21262d;padding-top:10px;display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-            <span style="font-weight:700;font-size:12px">CMV Total</span>
-            <div style="display:flex;gap:10px;align-items:center">
-              <span style="font-family:'Courier New';font-size:11px;color:${cmvTotP>0.35?'#ef4444':'#484f58'}">${P(cmvTotP)}</span>
-              <span style="font-family:'Courier New';font-size:14px;font-weight:700;color:${cmvTotP>0.35?'#ef4444':cmvTotP>0.30?'#f59e0b':'#22c55e'}">${R(tConsumo+tVip+tDesp)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="box" style="margin:0">
-        <div class="bh"><span class="bt">CMV Bebidas — Gauge</span></div>
-        <div class="bb" style="text-align:center;padding:20px">
-          <div style="font-family:'Courier New';font-size:44px;font-weight:700;color:${gColor}">${P(cmvBebP)}</div>
-          <div style="font-size:11px;color:#484f58;margin-top:6px">Meta: até 28%</div>
-          <div style="background:#1c2332;border-radius:6px;height:8px;margin:14px 0 6px;overflow:hidden">
-            <div style="height:8px;border-radius:6px;background:linear-gradient(90deg,#22c55e,#f59e0b 70%,#ef4444);width:${Math.min(100,(cmvBebP/0.40)*100).toFixed(1)}%"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:9px;color:#484f58"><span>0%</span><span class="green">28%</span><span>40%</span></div>
-        </div>
-      </div>
+  const prodRows=Object.values(porProd).sort((a,b)=>b.cmv-a.cmv);
+
+  set("p-cmv",`
+    <div class="eyebrow">ANÁLISE</div>
+    <div class="pg-t">CMV por Produto</div>
+    <div class="kpis">
+      ${kpi("CMV Total Período",R(tCmv),"","#e6edf3","#2563eb")}
+      ${kpi("CMV%",tRec?P(tCmv/tRec):"—",tRec?(tCmv/tRec>0.28?"⚠ Acima meta":"✓ Dentro meta"):"",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e")}
+      ${kpi("Faturamento Bar",R(calcs.reduce((s,e)=>s+e.rec_bar,0)),"sem cobertura","#e6edf3","#8b5cf6")}
     </div>
     <div class="box">
-      <div class="bh"><span class="bt">Estoque de Abertura</span>
-        <button class="btn bg_ bsm" onclick="estEdit=!estEdit;renderEstoque()">${estEdit?'Cancelar':'Editar'}</button>
-      </div>
-      <div class="bb">
-        ${estEdit?`<div style="display:flex;gap:8px;align-items:flex-end">
-          <div class="fi" style="flex:1"><label>Valor do Estoque Inicial (R$)</label><input id="est-inp" type="number" value="${S.config.estoqueInicial||''}"></div>
-          <button class="btn bp" onclick="FS.setDoc('config','settings',{...S.config,estoqueInicial:nv('est-inp')});estEdit=false;">Salvar</button>
-        </div>`:`
-          <div style="font-family:'Courier New';font-size:34px;font-weight:700;color:#3b82f6">${R(S.config.estoqueInicial||0)}</div>
-          <div style="font-size:11px;color:#484f58;margin-top:6px">Valor investido ao iniciar o sistema</div>`}
-      </div>
+      <div class="bh"><span class="bt">CMV por Produto / Drink</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Item</th><th>Categoria</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">Receita</th><th class="r">CMV</th><th class="r">CMV%</th></tr></thead>
+        <tbody>${prodRows.length?prodRows.map(r=>`<tr>
+          <td class="w6">${r.nome}</td>
+          <td class="mt">${r.cat||""}</td>
+          <td class="r mn">${r.vendido||"—"}</td>
+          <td class="r mn" style="color:${(r.cortesia||0)>0?"#f59e0b":"#484f58"}">${r.cortesia||0}</td>
+          <td class="r mn">${r.receita?R(r.receita):"—"}</td>
+          <td class="r mn w6">${Rf(r.cmv)}</td>
+          <td class="r">${r.receita?chip(P(r.cmv/r.receita),r.cmv/r.receita>0.35?"#ef4444":r.cmv/r.receita>0.25?"#f59e0b":"#22c55e"):"—"}</td>
+        </tr>`).join(""):`<tr><td colspan="7" class="empty">Nenhuma venda registrada ainda.</td></tr>`}
+        </tbody>
+      </table></div>
     </div>
   `);
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
-function init() {
-  initNav();
-  render();
+// ── PRÉ-CADASTRO ──────────────────────────────────────────────────────────────
+const ZIGPAY_PRODUTOS = [
+  {nome:'Água com gás',categoria:'Soft Drinks',preco_venda:9.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Água de coco',categoria:'Soft Drinks',preco_venda:19.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Água sem gás',categoria:'Soft Drinks',preco_venda:9.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'APEROL GF',categoria:'Garrafas',preco_venda:400.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Baer Matcha',categoria:'Soft Drinks',preco_venda:15.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Baer Mate',categoria:'Soft Drinks',preco_venda:15.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Batata Palito para 2',categoria:'Porções',preco_venda:52.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Bolinho de Costela (8 unidades)',categoria:'Porções',preco_venda:62.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'BOLO ANIVERSARIANTE',categoria:'Sobremesas',preco_venda:200.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Bruschetta Brie',categoria:'Porções',preco_venda:60.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Bruschetta Caprese',categoria:'Porções',preco_venda:57.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Bruschetta Mista (6 unidades)',categoria:'Porções',preco_venda:62.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Bruschetta Parma',categoria:'Porções',preco_venda:60.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Bruschetta Tradicional',categoria:'Porções',preco_venda:52.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Burrata ao Molho Tapenade',categoria:'Pratos',preco_venda:79.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Café Expresso',categoria:'Soft Drinks',preco_venda:8.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'CAMPARI GARRAFA',categoria:'Garrafas',preco_venda:500.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Capim Fresh',categoria:'Soft Drinks',preco_venda:40.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Carpaccio rústico trufado',categoria:'Pratos',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Chandon 3 Litros',categoria:'Espumantes',preco_venda:1500.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Chandon Brut',categoria:'Espumantes',preco_venda:415.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'CHANDON MAGNUN 1,5L',categoria:'Espumantes',preco_venda:770.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Chandon Passion',categoria:'Espumantes',preco_venda:415.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Chandon Rose',categoria:'Espumantes',preco_venda:415.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Cheese Bacon',categoria:'Lanches',preco_venda:64.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Cheeseburguer',categoria:'Lanches',preco_venda:55.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Churros 6 unids',categoria:'Sobremesas',preco_venda:46.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Citrus',categoria:'Soft Drinks',preco_venda:11.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'COCA COLA',categoria:'Soft Drinks',preco_venda:11.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Coca-Cola zero',categoria:'Soft Drinks',preco_venda:11.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Coquetel de Frutas',categoria:'Soft Drinks',preco_venda:35.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Cordero con Piel de Lobo - Blend de Blancas',categoria:'Vinhos',preco_venda:395.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Cordero con Piel de Lobo - Chardonnay',categoria:'Vinhos',preco_venda:395.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Corona',categoria:'Cervejas',preco_venda:22.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'COSUMEL CORONA',categoria:'Cervejas',preco_venda:25.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'COSUMEL HEINEKEN',categoria:'Cervejas',preco_venda:24.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'DADINHO DE TAPIOCA (com geleia apimentada de damasco)',categoria:'Porções',preco_venda:55.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Dom Perrignon Green',categoria:'Espumantes',preco_venda:3500.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Dom perrignon Rose',categoria:'Espumantes',preco_venda:7000.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'DON LUIZ REGUA (4SHOTS)',categoria:'Licores',preco_venda:100.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Dose 43 chocolate',categoria:'Licores',preco_venda:60.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Dose  Ballena',categoria:'Licores',preco_venda:55.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Dose Don Luiz',categoria:'Licores',preco_venda:32.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'DV Catena - Malbec / Cabernet',categoria:'Vinhos',preco_venda:395.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Espetinhos Mistos (6 unidades)',categoria:'Porções',preco_venda:75.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'FETTUTINE CARBONARA',categoria:'Pratos',preco_venda:87.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'FETTUTINE  C/ MEDALÃO DE FILET MIGNON',categoria:'Pratos',preco_venda:87.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Filé Mignon Aperitivo',categoria:'Porções',preco_venda:97.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Fishn Chips',categoria:'Porções',preco_venda:73.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Fresh Pink',categoria:'Soft Drinks',preco_venda:40.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Aberfield',categoria:'Garrafas',preco_venda:800.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Bacardi 8 anos',categoria:'Garrafas',preco_venda:660.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Bacardi Carta Blanca',categoria:'Garrafas',preco_venda:555.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Bacardi Oro',categoria:'Garrafas',preco_venda:555.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Baileys',categoria:'Garrafas',preco_venda:725.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Beefeater Pink',categoria:'Garrafas',preco_venda:700.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Belvedere',categoria:'Garrafas',preco_venda:670.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Belvedere 3L',categoria:'Garrafas',preco_venda:2700.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Black Label',categoria:'Garrafas',preco_venda:750.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Blue Label',categoria:'Garrafas',preco_venda:3200.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Bombay',categoria:'Garrafas',preco_venda:600.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Bombay 1,75mL',categoria:'Garrafas',preco_venda:1450.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Chivas 12 anos',categoria:'Garrafas',preco_venda:760.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Don Luiz',categoria:'Garrafas',preco_venda:300.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Gentleman Jack',categoria:'Garrafas',preco_venda:810.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Gold Label',categoria:'Garrafas',preco_venda:950.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Grey Goose',categoria:'Garrafas',preco_venda:670.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa GreyGoose 1.5L',categoria:'Garrafas',preco_venda:1400.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa GreyGoose 4.5L',categoria:'Garrafas',preco_venda:4300.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Hendricks',categoria:'Garrafas',preco_venda:770.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Herencia Café',categoria:'Garrafas',preco_venda:660.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jack Apple',categoria:'Garrafas',preco_venda:625.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jack Daniels Old n7',categoria:'Garrafas',preco_venda:640.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jack Fire',categoria:'Garrafas',preco_venda:625.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jack Honey',categoria:'Garrafas',preco_venda:625.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jack Single Barrel',categoria:'Garrafas',preco_venda:725.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jagermeister',categoria:'Garrafas',preco_venda:770.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jose Cuervo Ouro',categoria:'Garrafas',preco_venda:555.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Jose Cuervo Prata',categoria:'Garrafas',preco_venda:555.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Leblon',categoria:'Garrafas',preco_venda:495.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Leblon Signature Merlet',categoria:'Garrafas',preco_venda:495.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Licor 43',categoria:'Garrafas',preco_venda:725.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Nordés',categoria:'Garrafas',preco_venda:770.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Oxley',categoria:'Garrafas',preco_venda:825.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Patrón Ouro',categoria:'Garrafas',preco_venda:660.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Patron Reposado',categoria:'Garrafas',preco_venda:600.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Patrón Silver',categoria:'Garrafas',preco_venda:660.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Salinissima',categoria:'Garrafas',preco_venda:555.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Star Of Bombay',categoria:'Garrafas',preco_venda:825.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Stolichnaya',categoria:'Garrafas',preco_venda:640.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Tanqueray Ten',categoria:'Garrafas',preco_venda:825.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Garrafa Woodford Reserve',categoria:'Garrafas',preco_venda:725.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Gelo de coco - 1 unid',categoria:'Soft Drinks',preco_venda:12.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Gelo de coco - Balde com 5',categoria:'Soft Drinks',preco_venda:52.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Gentleman Jack  garrafa',categoria:'Garrafas',preco_venda:890.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'GF Ballena',categoria:'Garrafas',preco_venda:725.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'GF BONNUT LICOR AVELÃ',categoria:'Licores',preco_venda:650.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'GREY GOOSE 1,5L',categoria:'Garrafas',preco_venda:1400.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Guaraná',categoria:'Soft Drinks',preco_venda:11.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Guaraná zero',categoria:'Soft Drinks',preco_venda:11.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Hambúrguer Brie & Bacon',categoria:'Lanches',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Hambúrguer de Costela',categoria:'Lanches',preco_venda:62.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Hambúrguer Mahau',categoria:'Lanches',preco_venda:61.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Heineken',categoria:'Cervejas',preco_venda:22.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Heineken Zero',categoria:'Cervejas',preco_venda:22.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Honey Fresh',categoria:'Soft Drinks',preco_venda:40.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Hot Roll Mahau',categoria:'Pratos',preco_venda:67.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Kharmed - Beijo na Boca',categoria:'Sobremesas',preco_venda:42.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Lanche Vegetariano',categoria:'Lanches',preco_venda:62.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Licor 43 chocolate',categoria:'Garrafas',preco_venda:835.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'LICOR BONNUT AVELA DS',categoria:'Licores',preco_venda:40.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'LICOR DE CACAU ROYAL CHARLOTTE',categoria:'Licores',preco_venda:50.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Maori Poke',categoria:'Pratos',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Medalhão filet mignon',categoria:'Pratos',preco_venda:35.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Mini Coxinhas da Casa 10 unids',categoria:'Porções',preco_venda:57.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Mini Hambúrguers (5 unidades)',categoria:'Porções',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Mini Salgados da Casa (10 unidades)',categoria:'Porções',preco_venda:49.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'MOET CHANDON ICE IMPERIAL',categoria:'Espumantes',preco_venda:3850.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'NHOQUE DE BATATA',categoria:'Pratos',preco_venda:75.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'PALETA SUÍNA',categoria:'Pratos',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Parmegiana aperitivo com Batata Rústica',categoria:'Porções',preco_venda:87.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Pasteis Mistos 6 unids',categoria:'Porções',preco_venda:52.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Pink Lemonade (Saint Pierre)',categoria:'Soft Drinks',preco_venda:17.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Pink Lemonade (Saint Pierre) COMBO',categoria:'Soft Drinks',preco_venda:17.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Power Energy Drink Combo',categoria:'Soft Drinks',preco_venda:25.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Pudim de Leite Condensado',categoria:'Sobremesas',preco_venda:42.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Purple Fresh',categoria:'Soft Drinks',preco_venda:40.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Ravióli de Queijo de Búfala',categoria:'Pratos',preco_venda:87.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Ravioli Mozza',categoria:'Pratos',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull (COMBO)',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Frutas Vermelhas zero',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Melancia',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Melancia (COMBO)',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Sugar Free',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Sugar Free  (COMBO)',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Tropical',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Tropical (COMBO)',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Red Bull Vermelhas zero (COMBO)',categoria:'Soft Drinks',preco_venda:29.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Risoto Cogumelo',categoria:'Pratos',preco_venda:90.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Risoto de Alho Poró',categoria:'Pratos',preco_venda:90.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Risoto de Queijo Brie',categoria:'Pratos',preco_venda:90.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Rose Piscine',categoria:'Vinhos',preco_venda:415.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Salada da Caesar',categoria:'Pratos',preco_venda:72.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Salada Grega com Iogurte Natural',categoria:'Pratos',preco_venda:49.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Salada Veggie',categoria:'Pratos',preco_venda:49.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'SALMÃO GRELHADO',categoria:'Pratos',preco_venda:98.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Sanduiche de Filé Mignon',categoria:'Lanches',preco_venda:64.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Scheweppes',categoria:'Soft Drinks',preco_venda:8.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Sprite',categoria:'Soft Drinks',preco_venda:8.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Suco de laranja',categoria:'Soft Drinks',preco_venda:14.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Suco de limão',categoria:'Soft Drinks',preco_venda:14.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Suco de uva',categoria:'Soft Drinks',preco_venda:14.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Tábua Bruschettas Mista 6 unids',categoria:'Porções',preco_venda:42.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'TARTAR DE SALMÃO',categoria:'Pratos',preco_venda:69.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Tiras de Frango Crocantes (500 gramas)',categoria:'Porções',preco_venda:65.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Tônica Scheweppes',categoria:'Soft Drinks',preco_venda:14.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Tônica Scheweppes zero',categoria:'Soft Drinks',preco_venda:14.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Tônica Schweppes Zero',categoria:'Soft Drinks',preco_venda:14.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Torta de Chocolate Belga',categoria:'Sobremesas',preco_venda:42.0,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0},
+  {nome:'Virgem Mule',categoria:'Soft Drinks',preco_venda:38.5,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0}
+];
 
-  try {
-    FS.listen('eventos', d => { S.eventos=d; render(); });
-    FS.listen('custos',  d => { S.custos=d; render(); });
-    FS.listen('compras', d => { S.compras=d; render(); });
-    db.collection('config').doc('settings').onSnapshot(s => {
-      if(s.exists) S.config=s.data();
-      render();
+async function seedIfEmpty(){
+  if(!db) return;
+  // Check Firestore rules if seed fails — set rules to allow read, write: if true;
+  if(!db||S.produtos.length>0) return;
+  console.log("Cadastrando "+ZIGPAY_PRODUTOS.length+" produtos do ZigPay...");
+  const batch_size = 50;
+  for(let i=0; i<ZIGPAY_PRODUTOS.length; i+=batch_size){
+    const batch = db.batch();
+    const chunk = ZIGPAY_PRODUTOS.slice(i, i+batch_size);
+    chunk.forEach(p=>{
+      const ref = db.collection("produtos").doc();
+      batch.set(ref, {...p, categoria:p.cat, id:ref.id, preco_venda:p.venda});
     });
-  } catch(e) {
-    console.warn('Firebase offline:', e.message);
+    await batch.commit();
+    console.log("Lote "+(Math.floor(i/batch_size)+1)+" cadastrado.");
   }
+  console.log("Todos os produtos cadastrados!");
 }
 
+
+
+// ── ZIGPAY IMPORT ─────────────────────────────────────────────────────────────
+// Categories → Bar revenue
+const ZIG_BAR_CATS = new Set([
+  'Cervejas','Soft Drinks','Garrafas','Garrafas Rum','Garrafas Vodka','Garrafas Whisky',
+  'Combos','Doses','Doses Rum','Doses Tequila','Doses Gin','Doses Cachaças',
+  'Espumante','Espumantes','Vinhos','Vinhos Branco','Vinhos Tinto','LICOR',
+  'Drinks Clássicos','Drinks Autorais','Gin Tônicas','Drinks','Moscow Mules',
+  'Shots','Caipirinhas','Pratos','Pratos Leves','Porções','Lanches','Sobremesas',
+]);
+// Categories → Entrada (service fees)
+const ZIG_ENTRADA_CATS = new Set(['SERVIÇOS','TAXA BISTRO']);
+// Keywords → filter out entirely
+const ZIG_SKIP = ['rider','souvenir','chapelaria','caixinha','permuta',
+  'aniversário','double','canudo','caução','upgrade','ñ vender'];
+
+function parseZigFile(file, cb) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array', cellStyles:false});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+
+      // Find header row
+      let hIdx = rows.findIndex(r => r && r[0]==='SKU');
+      if(hIdx<0) { alert('Formato não reconhecido. Verifique se é o relatório correto.'); return; }
+
+      const data = rows.slice(hIdx+1).filter(r => r && r[1]); // has name
+
+      let bar=0, entrada=0, items=[];
+      data.forEach(r => {
+        const nome   = String(r[1]||'').trim();
+        const cat    = String(r[2]||'').trim();
+        const qtd    = parseFloat(r[5])||0;
+        const vUnit  = parseFloat(r[6])||0;
+        const vTotal = parseFloat(r[9])||0; // valor total (após desconto)
+
+        if(qtd<=0||vTotal<0) return;
+
+        const nomeLow = nome.toLowerCase();
+        if(ZIG_SKIP.some(k=>nomeLow.includes(k))) return;
+
+        // TAXA/SERVIÇOS → entrada
+        if(ZIG_ENTRADA_CATS.has(cat) || nomeLow.includes('taxa')) {
+          entrada += vTotal; return;
+        }
+
+        if(!ZIG_BAR_CATS.has(cat)) return; // skip unknown
+
+        bar += vTotal;
+        items.push({nome, cat, qtd, vUnit, vTotal});
+      });
+
+      cb({bar, entrada, items});
+    } catch(err) {
+      alert('Erro ao ler arquivo: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function importZigPay() {
+  const file = el('zig-file')?.files?.[0];
+  if(!file) { alert('Selecione o arquivo Excel do ZigPay'); return; }
+
+  const data   = sv('zig-data');
+  const nome   = sv('zig-nome');
+  if(!data||!nome) { alert('Preencha data e nome do evento'); return; }
+
+  parseZigFile(file, async ({bar, entrada, items}) => {
+    if(!db) { alert('Firebase não conectado'); return; }
+
+    // Create event
+    const ev = {
+      id: null,
+      data, nome,
+      publico: nv('zig-pub'),
+      vips:    nv('zig-vips'),
+      bar,
+      entrada,
+      dj:       nv('zig-dj'),
+      seguranca:nv('zig-seg'),
+      staff:    nv('zig-sta'),
+      outros:   nv('zig-out'),
+      origem:   'zigpay',
+    };
+
+    const evRef = await db.collection('eventos').add(ev);
+    await evRef.update({id: evRef.id});
+
+    // Create vendas - try to match products
+    for(const item of items) {
+      // Try match by name (fuzzy)
+      const nomeLow = item.nome.toLowerCase();
+      const prod = S.produtos.find(p=>
+        p.nome.toLowerCase()===nomeLow ||
+        nomeLow.includes(p.nome.toLowerCase()) ||
+        p.nome.toLowerCase().includes(nomeLow)
+      );
+      const ficha = !prod && S.fichas.find(f=>
+        f.nome.toLowerCase()===nomeLow ||
+        nomeLow.includes(f.nome.toLowerCase())
+      );
+
+      await db.collection('evento_vendas').add({
+        id: null,
+        evento_id:    evRef.id,
+        tipo:         ficha?'ficha':prod?'produto':'manual',
+        item_id:      ficha?.id || prod?.id || null,
+        nome_zigpay:  item.nome,
+        cat_zigpay:   item.cat,
+        qtd_vendida:  item.qtd,
+        qtd_cortesia: 0,
+        valor_unit:   item.vUnit,
+        valor_total:  item.vTotal,
+      });
+    }
+
+    el('zig-import-box').classList.add('hidden');
+    el('zig-preview').textContent='';
+    alert(`✓ Evento importado!\nBar: R$${bar.toFixed(2)}\nEntrada/Serviços: R$${entrada.toFixed(2)}\n${items.length} itens de venda`);
+  });
+}
+
+// Preview when file selected
+document.addEventListener('change', e => {
+  if(e.target.id!=='zig-file') return;
+  const file = e.target.files?.[0]; if(!file) return;
+  parseZigFile(file, ({bar, entrada, items}) => {
+    el('zig-preview').innerHTML = `
+      <div style="background:#1c2332;border-radius:6px;padding:10px;margin-top:4px">
+        <span style="color:#22c55e;font-weight:600">✓ Arquivo lido:</span>
+        <span style="margin-left:8px">Bar <strong style="color:#e6edf3">R$ ${bar.toFixed(2)}</strong></span>
+        <span style="margin-left:8px">Entrada <strong style="color:#e6edf3">R$ ${entrada.toFixed(2)}</strong></span>
+        <span style="margin-left:8px">${items.length} itens de venda</span>
+      </div>`;
+  });
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function init(){
+  initNav();render();
+  if(db){
+    FS.listen("produtos",  d=>{S.produtos=d;render();});
+    FS.listen("fichas",    d=>{S.fichas=d;render();});
+    FS.listen("compras",   d=>{S.compras=d;render();});
+    FS.listen("eventos",   d=>{S.eventos=d;render();});
+    FS.listen("evento_vendas",d=>{S.evento_vendas=d;render();});
+    FS.listen("custos",d=>{S.custos=d;render();});
+    db.collection("config").doc("settings").onSnapshot(s=>{
+      if(s.exists)S.config=s.data();render();
+    });
+    setTimeout(seedIfEmpty,3000);
+  }
+}
 init();
 </script>
 </body>

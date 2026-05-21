@@ -425,11 +425,19 @@ function renderProd(){
     </div>
   </div>`:"";
 
+  const semProdutos = S.produtos.length===0;
   set("p-prod",`
     <div class="pg-h">
       <div><div class="eyebrow">CADASTRO CENTRAL</div><div class="pg-t">Produtos</div></div>
-      <button class="btn bp" onclick="prodForm={};renderProd()">+ Novo Produto</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${semProdutos?`<button id="seed-btn" class="btn bg_" onclick="seedIfEmpty(true)">⬇ Cadastrar produtos base</button>`:""}
+        <button class="btn bp" onclick="prodForm={};renderProd()">+ Novo Produto</button>
+      </div>
     </div>
+    ${semProdutos?`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">
+      ℹ Nenhum produto cadastrado ainda. Clique em <strong>"Cadastrar produtos base"</strong> para importar os 161 produtos do ZigPay.<br>
+      <span style="font-size:10px;margin-top:4px;display:block">Se der erro, vá em Firebase Console → Firestore → Regras e coloque: <code style="background:#1c2332;padding:2px 5px;border-radius:3px">allow read, write: if true;</code></span>
+    </div>`:""}
     ${formHTML}
     <div class="flt">
       <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar produto..." value="${prodQ}" oninput="prodQ=this.value;renderProd()"></div>
@@ -1241,23 +1249,35 @@ const ZIGPAY_PRODUTOS = [
   {nome:'Virgem Mule',categoria:'Soft Drinks',preco_venda:38.5,preco_compra:0,capacidade_ml:0,unidade:'un',estoque_min:0,estoque_inicial:0}
 ];
 
-async function seedIfEmpty(){
+async function seedIfEmpty(force=false){
   if(!db) return;
-  // Check Firestore rules if seed fails — set rules to allow read, write: if true;
-  if(!db||S.produtos.length>0) return;
-  console.log("Cadastrando "+ZIGPAY_PRODUTOS.length+" produtos do ZigPay...");
-  const batch_size = 50;
-  for(let i=0; i<ZIGPAY_PRODUTOS.length; i+=batch_size){
-    const batch = db.batch();
-    const chunk = ZIGPAY_PRODUTOS.slice(i, i+batch_size);
-    chunk.forEach(p=>{
-      const ref = db.collection("produtos").doc();
-      batch.set(ref, {...p, categoria:p.cat, id:ref.id, preco_venda:p.venda});
-    });
-    await batch.commit();
-    console.log("Lote "+(Math.floor(i/batch_size)+1)+" cadastrado.");
+  if(!force && S.produtos.length>0) return;
+  const seedBtn = el("seed-btn");
+  if(seedBtn){ seedBtn.textContent="Cadastrando..."; seedBtn.disabled=true; }
+  try {
+    console.log("Cadastrando "+ZIGPAY_PRODUTOS.length+" produtos...");
+    const batch_size = 50;
+    for(let i=0; i<ZIGPAY_PRODUTOS.length; i+=batch_size){
+      const batch = db.batch();
+      ZIGPAY_PRODUTOS.slice(i,i+batch_size).forEach(p=>{
+        const ref = db.collection("produtos").doc();
+        batch.set(ref, {
+          nome:p.nome, categoria:p.categoria,
+          preco_venda:p.preco_venda, preco_compra:0,
+          capacidade_ml:0, unidade:p.unidade||"un",
+          estoque_min:0, estoque_inicial:0, id:ref.id
+        });
+      });
+      await batch.commit();
+      if(seedBtn) seedBtn.textContent=`Cadastrando... ${Math.min(i+batch_size,ZIGPAY_PRODUTOS.length)}/${ZIGPAY_PRODUTOS.length}`;
+    }
+    if(seedBtn){ seedBtn.textContent="✓ Concluído!"; }
+    console.log("Produtos cadastrados com sucesso!");
+  } catch(err) {
+    console.error("Erro ao cadastrar produtos:", err);
+    if(seedBtn){ seedBtn.textContent="Erro — veja console"; seedBtn.disabled=false; }
+    alert("Erro ao cadastrar:\n"+err.message+"\n\nVerifique as regras do Firestore:\nFirestore → Regras → allow read, write: if true;");
   }
-  console.log("Todos os produtos cadastrados!");
 }
 
 
@@ -1414,7 +1434,7 @@ function init(){
     db.collection("config").doc("settings").onSnapshot(s=>{
       if(s.exists)S.config=s.data();render();
     });
-    setTimeout(seedIfEmpty,3000);
+    // Products are seeded manually via button in Produtos page
   }
 }
 init();

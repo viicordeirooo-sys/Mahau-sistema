@@ -110,6 +110,19 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
   .ing-row{grid-template-columns:1fr 80px 32px}
 }
 @media(min-width:681px){#bnav{display:none!important}#sb{display:flex}}
+
+/* bulk edit */
+.bulk-inp{background:#0d1117;border:1px solid #2d333b;border-radius:4px;padding:5px 7px;color:#e6edf3;font-size:11px;font-family:monospace;width:100%;-webkit-appearance:none;outline:none}
+.bulk-inp:focus{border-color:#2563eb}
+.bulk-save-bar{position:sticky;bottom:0;background:#0d1117;border-top:1px solid #21262d;padding:10px;display:flex;gap:8px;align-items:center;z-index:50}
+.bulk-dirty{border-color:#f59e0b!important}
+/* lista compras */
+.lc-strip{background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.2);border-radius:6px;padding:12px;margin-bottom:10px}
+/* inventário */
+.inv-ok{color:#22c55e}.inv-warn{color:#f59e0b}.inv-bad{color:#ef4444}
+/* fechamento */
+.fecha-sep{border-top:1px solid #21262d;margin:8px 0}
+.fecha-row{display:flex;justify-content:space-between;padding:4px 0;font-size:12px}
 </style>
 </head>
 <body>
@@ -138,6 +151,8 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
   <div id="p-eventos" class="page"></div>
   <div id="p-custos"  class="page"></div>
   <div id="p-cmv"     class="page"></div>
+  <div id="p-inv"     class="page"></div>
+  <div id="p-fecha"   class="page"></div>
 </div>
 </div>
 <div id="bnav" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -157,6 +172,10 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>FIXOS</button>
   <button class="bn" id="bn-cmv"     onclick="go('cmv')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>CMV</button>
+  <button class="bn" id="bn-inv"    onclick="go('inv')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>INV.</button>
+  <button class="bn" id="bn-fecha"  onclick="go('fecha')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>FECHA.</button>
 </div>
 
 <script>
@@ -189,7 +208,7 @@ const FS = {
 const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
-  evento_vendas:[],custos:[],config:{datasNoMes:4}
+  evento_vendas:[],custos:[],inventarios:[],config:{datasNoMes:4}
 };
 
 // ── FORMATTERS ────────────────────────────────────────────────────────────────
@@ -258,8 +277,10 @@ function calcEv(e) {
 
 function alertasEstoque() {
   return S.produtos.filter(p=>{
-    const atual=estoqueAtual(p.id);
-    return atual<=(p.estoque_min||0);
+    const min = p.estoque_min||0;
+    if(min===0) return false; // só alerta se mínimo foi definido
+    const atual = estoqueAtual(p.id);
+    return atual < min;
   });
 }
 
@@ -277,6 +298,8 @@ const PAGES=[
   {id:"eventos", label:"Eventos"},
   {id:"custos",  label:"Custos Fixos"},
   {id:"cmv",     label:"CMV"},
+  {id:"inv",     label:"Inventário"},
+  {id:"fecha",   label:"Fechamento"},
 ];
 
 function initNav(){
@@ -318,6 +341,8 @@ function render(){
   if(p==="eventos") renderEventos();
   if(p==="custos")  renderCustos();
   if(p==="cmv")     renderCMV();
+  if(p==="inv")     renderInventario();
+  if(p==="fecha")   renderFechamento();
 }
 
 function kpi(title,value,sub,color,accent){
@@ -393,6 +418,7 @@ let prodForm=null, prodQ="", prodCat="Todos";
 const CATS_PROD=["Todos","Destilados","Licores","Cervejas","Energéticos","Soft Drinks","Águas","Espumantes","Champagne","Vinhos","Sidras","Sake","Insumos"];
 
 function renderProd(){
+  if(bulkMode){renderBulkEdit();return;}
   let rows=S.produtos.filter(p=>{
     if(prodCat!=="Todos"&&p.categoria!==prodCat) return false;
     if(prodQ&&!p.nome.toLowerCase().includes(prodQ.toLowerCase())) return false;
@@ -431,6 +457,7 @@ function renderProd(){
       <div><div class="eyebrow">CADASTRO CENTRAL</div><div class="pg-t">Produtos</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${semProdutos?`<button id="seed-btn" class="btn bg_" onclick="seedIfEmpty(true)">⬇ Cadastrar produtos base</button>`:""}
+        <button class="btn bg_" onclick="bulkMode=true;renderBulkEdit()">✏ Editar em Massa</button>
         <button class="btn bp" onclick="prodForm={};renderProd()">+ Novo Produto</button>
       </div>
     </div>
@@ -452,7 +479,7 @@ function renderProd(){
         <tbody>${rows.length?rows.map(p=>{
           const atual=estoqueAtual(p.id);
           const mg=p.preco_venda&&p.preco_compra?((p.preco_venda-p.preco_compra)/p.preco_venda):null;
-          const alr=atual<=(p.estoque_min||0);
+          const alr=(p.estoque_min||0)>0 && atual<(p.estoque_min||0);
           return`<tr>
             <td class="w6">${p.nome}</td>
             <td class="mt">${p.categoria||""}</td>
@@ -482,6 +509,103 @@ function saveProd(){
     preco_venda:nv("pf-venda"),estoque_min:nv("pf-min"),estoque_inicial:nv("pf-ini"),
   };
   FS.save("produtos",d); prodForm=null;
+}
+
+
+// ── BULK EDIT ─────────────────────────────────────────────────────────────────
+let bulkMode=false;
+const bulkChanges={};
+
+function renderBulkEdit(){
+  let rows=S.produtos.filter(p=>{
+    if(prodCat!=="Todos"&&p.categoria!==prodCat) return false;
+    if(prodQ&&!p.nome.toLowerCase().includes(prodQ.toLowerCase())) return false;
+    return true;
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+
+  const cnt=Object.keys(bulkChanges).length;
+  set("p-prod",`
+    <div class="pg-h">
+      <div><div class="eyebrow">EDIÇÃO EM MASSA</div><div class="pg-t">Preencher Produtos</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn bg_" onclick="bulkMode=false;Object.keys(bulkChanges).forEach(k=>delete bulkChanges[k]);renderProd()">✕ Cancelar</button>
+        <button class="btn bp" onclick="saveBulkAll()">💾 Salvar ${cnt>0?cnt+" alterações":"Tudo"}</button>
+      </div>
+    </div>
+    <div class="lc-strip" style="font-size:11px;color:#3b82f6">
+      ℹ Preencha <strong>Custo</strong>, <strong>Cap. ml</strong> e <strong>Mínimo</strong>. Campos em amarelo têm alteração pendente. Clique em "Salvar Tudo" quando terminar.
+    </div>
+    <div class="flt">
+      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar produto..." value="${prodQ}" oninput="prodQ=this.value;renderBulkEdit()"></div>
+    </div>
+    <div class="pills">
+      ${CATS_PROD.map(c=>`<button class="pill${prodCat===c?" on":""}" onclick="prodCat='${c}';renderBulkEdit()">${c}</button>`).join("")}
+    </div>
+    <div class="box">
+      <div class="bh"><span class="bt">${rows.length} produtos</span><span class="bt" style="color:#f59e0b">${cnt>0?cnt+" pendentes":""}</span></div>
+      <div class="tw"><table>
+        <thead><tr>
+          <th>Produto</th><th>Cat.</th>
+          <th class="r">Custo Unit (R$)</th>
+          <th class="r">Cap. (ml)</th>
+          <th>Unidade</th>
+          <th class="r">Estoque Mín</th>
+          <th class="r">Estoque Inicial</th>
+        </tr></thead>
+        <tbody>${rows.map(p=>{
+          const bc=bulkChanges[p.id]||{};
+          const cu=bc.preco_compra!==undefined?bc.preco_compra:p.preco_compra||"";
+          const cap=bc.capacidade_ml!==undefined?bc.capacidade_ml:p.capacidade_ml||"";
+          const un=bc.unidade||p.unidade||"garrafa";
+          const mn=bc.estoque_min!==undefined?bc.estoque_min:p.estoque_min||"";
+          const ini=bc.estoque_inicial!==undefined?bc.estoque_inicial:p.estoque_inicial||"";
+          const dirty=Object.keys(bc).length>0;
+          return`<tr style="${dirty?"background:rgba(245,158,11,.05)":""}">
+            <td class="w6">${p.nome}</td>
+            <td class="mt" style="font-size:10px">${p.categoria||""}</td>
+            <td><input class="bulk-inp${dirty&&bc.preco_compra!==undefined?" bulk-dirty":""}" type="number" value="${cu}" step="0.01" placeholder="0.00"
+              onchange="setBulk('${p.id}','preco_compra',parseFloat(this.value)||0);this.classList.add('bulk-dirty')"></td>
+            <td><input class="bulk-inp${dirty&&bc.capacidade_ml!==undefined?" bulk-dirty":""}" type="number" value="${cap}" placeholder="750"
+              onchange="setBulk('${p.id}','capacidade_ml',parseFloat(this.value)||0);this.classList.add('bulk-dirty')"></td>
+            <td><select class="bulk-inp" onchange="setBulk('${p.id}','unidade',this.value)">
+              ${["garrafa","lata","caixa","litro","kg","un"].map(u=>`<option${un===u?" selected":""}>${u}</option>`).join("")}
+            </select></td>
+            <td><input class="bulk-inp${dirty&&bc.estoque_min!==undefined?" bulk-dirty":""}" type="number" value="${mn}" placeholder="0"
+              onchange="setBulk('${p.id}','estoque_min',parseFloat(this.value)||0);this.classList.add('bulk-dirty')"></td>
+            <td><input class="bulk-inp${dirty&&bc.estoque_inicial!==undefined?" bulk-dirty":""}" type="number" value="${ini}" placeholder="0"
+              onchange="setBulk('${p.id}','estoque_inicial',parseFloat(this.value)||0);this.classList.add('bulk-dirty')"></td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>
+    <div class="bulk-save-bar">
+      <button class="btn bp" onclick="saveBulkAll()">💾 Salvar ${cnt>0?cnt+" alterações":"Tudo"}</button>
+      <span style="font-size:11px;color:#484f58">${cnt>0?cnt+" produto(s) com alterações pendentes":"Faça alterações acima e clique em Salvar"}</span>
+    </div>
+  `);
+}
+
+function setBulk(pid,field,val){
+  if(!bulkChanges[pid]) bulkChanges[pid]={};
+  bulkChanges[pid][field]=val;
+}
+
+async function saveBulkAll(){
+  const ids=Object.keys(bulkChanges);
+  if(ids.length===0){alert("Nenhuma alteração pendente.");return;}
+  const btn=event.target;
+  btn.textContent="Salvando...";btn.disabled=true;
+  let saved=0;
+  for(const pid of ids){
+    const p=S.produtos.find(x=>x.id===pid);
+    if(!p) continue;
+    const updated={...p,...bulkChanges[pid]};
+    await FS.save("produtos",updated);
+    delete bulkChanges[pid];
+    saved++;
+  }
+  btn.textContent="✓ Salvo!"; setTimeout(()=>{bulkMode=false;renderProd();},600);
 }
 
 // ── FICHAS TÉCNICAS ───────────────────────────────────────────────────────────
@@ -608,8 +732,11 @@ function renderEstoque(){
   const compMes=totalComprasMes();
 
   set("p-estoque",`
-    <div class="eyebrow">SALDO ATUAL</div>
-    <div class="pg-t">Estoque</div>
+    <div class="pg-h">
+      <div><div class="eyebrow">SALDO ATUAL</div><div class="pg-t">Estoque</div></div>
+      <button class="btn bg_" onclick="showListaCompras=!showListaCompras;renderEstoque()">📋 Lista de Compras</button>
+    </div>
+    <div id="lista-compras-container"></div>
     <div class="kpis">
       ${kpi("Produtos Cadastrados",S.produtos.length,"","#e6edf3","#2563eb")}
       ${kpi("Valor em Estoque",R(totalValor),"estimado (custo)","#e6edf3","#3b82f6")}
@@ -643,6 +770,76 @@ function renderEstoque(){
       </table></div>
     </div>
   `);
+  if(showListaCompras) renderListaCompras();
+}
+
+
+// ── LISTA DE COMPRAS ──────────────────────────────────────────────────────────
+let showListaCompras=false;
+
+function renderListaCompras(){
+  const criticos=S.produtos.filter(p=>{
+    const min=p.estoque_min||0;
+    if(!min) return false;
+    return estoqueAtual(p.id)<min;
+  }).map(p=>({
+    ...p,
+    atual:estoqueAtual(p.id),
+    falta:Math.max(0,(p.estoque_min||0)-estoqueAtual(p.id)),
+    sugestao:Math.ceil(Math.max(0,(p.estoque_min||0)*1.5-estoqueAtual(p.id))),
+  })).sort((a,b)=>b.falta-a.falta);
+
+  const atentos=S.produtos.filter(p=>{
+    const min=p.estoque_min||0;
+    if(!min) return false;
+    const at=estoqueAtual(p.id);
+    return at>=min && at<min*1.5;
+  }).map(p=>({...p,atual:estoqueAtual(p.id)}));
+
+  const totalEst=criticos.reduce((s,p)=>s+p.sugestao*(p.preco_compra||0),0);
+
+  let txt="*Lista de Compras Mahau*\n";
+  txt+=new Date().toLocaleDateString("pt-BR")+"\n\n";
+  txt+="*URGENTE (abaixo do mínimo):*\n";
+  criticos.forEach(p=>{ txt+=`• ${p.nome}: ${p.sugestao} ${p.unidade||"un"}\n`; });
+  if(atentos.length){ txt+="\n*Atenção (próximo do mínimo):*\n"; atentos.forEach(p=>{ txt+=`• ${p.nome}: atual ${p.atual.toFixed(1)} ${p.unidade||"un"}\n`; }); }
+
+  set("lista-compras-container",`
+    <div class="lc-strip">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:13px">📋 Lista de Compras</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn bg_ bsm" onclick="copiarLista(\`${txt.replace(/`/g,"\`")}\`)">📱 Copiar WhatsApp</button>
+          <button class="btn bg_ bsm" onclick="showListaCompras=false;renderEstoque()">✕</button>
+        </div>
+      </div>
+      ${criticos.length?`
+      <div class="section-divider">⚠ URGENTE — abaixo do mínimo (${criticos.length} produtos)</div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Sugestão compra</th><th class="r">Custo est.</th></tr></thead>
+        <tbody>${criticos.map(p=>`<tr>
+          <td class="w6">${p.nome}</td>
+          <td class="r mn inv-bad">${p.atual.toFixed(1)} ${p.unidade||"un"}</td>
+          <td class="r mn">${p.estoque_min} ${p.unidade||"un"}</td>
+          <td class="r mn" style="color:#3b82f6;font-weight:700">${p.sugestao} ${p.unidade||"un"}</td>
+          <td class="r mn">${p.preco_compra?R(p.sugestao*(p.preco_compra||0)):"—"}</td>
+        </tr>`).join("")}
+        <tr class="tr-tot"><td>Total estimado</td><td colspan="3"></td><td class="r mn">${R(totalEst)}</td></tr>
+        </tbody>
+      </table></div>`:""
+      }
+      ${atentos.length?`
+      <div class="section-divider" style="margin-top:14px">⚡ ATENÇÃO — próximo do mínimo (${atentos.length} produtos)</div>
+      <div style="font-size:11px;color:#f59e0b">${atentos.map(p=>`${p.nome} (${p.atual.toFixed(1)}/${p.estoque_min})`).join("  ·  ")}</div>`:""
+      }
+      ${!criticos.length&&!atentos.length?`<div class="empty" style="padding:20px">✓ Estoque OK em todos os produtos com mínimo definido</div>`:""
+      }
+    </div>
+  `);
+}
+
+function copiarLista(txt){
+  navigator.clipboard.writeText(txt).then(()=>alert("Copiado! Cole no WhatsApp.")).catch(()=>alert(txt));
 }
 
 // ── COMPRAS ───────────────────────────────────────────────────────────────────
@@ -1023,59 +1220,100 @@ function addCusto(){
   el("cf-nome").value=""; el("cf-val").value="";
 }
 
-// ── CMV ───────────────────────────────────────────────────────────────────────
+// ── CMV ─────────────────────────────────────────────────────────────────────
 function renderCMV(){
   const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
+  const tCortesia=S.evento_vendas.reduce((s,v)=>{
+    const qc=v.qtd_cortesia||0; if(!qc) return s;
+    if(v.tipo==="produto"){const p=S.produtos.find(x=>x.id===v.item_id);return s+(p?qc*(p.preco_compra||0):0);}
+    if(v.tipo==="ficha"){const f=S.fichas.find(x=>x.id===v.item_id);return s+(f?qc*calcCustoFicha(f):0);}
+    return s;
+  },0);
 
-  // CMV por produto (aggregated)
+  // CMV por categoria
+  const porCat={};
+  S.evento_vendas.forEach(v=>{
+    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0),qv=v.qtd_vendida||0;
+    let cat="Outros",cmvI=0,recI=0;
+    if(v.tipo==="produto"){
+      const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
+      cat=p.categoria||"Outros";cmvI=qtd*(p.preco_compra||0);recI=qv*(p.preco_venda||0);
+    } else {
+      const f=S.fichas.find(x=>x.id===v.item_id);if(!f)return;
+      cat=f.categoria||"Drinks";cmvI=calcCustoFicha(f)*qtd;recI=qv*(f.preco_venda||0);
+    }
+    if(!porCat[cat]) porCat[cat]={cat,cmv:0,receita:0};
+    porCat[cat].cmv+=cmvI; porCat[cat].receita+=recI;
+  });
+  const catRows=Object.values(porCat).sort((a,b)=>b.cmv-a.cmv);
+
+  // CMV por produto (aggregated) — top 15
   const porProd={};
   S.evento_vendas.forEach(v=>{
     const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
     const qv=v.qtd_vendida||0,qc=v.qtd_cortesia||0;
     if(v.tipo==="produto"){
-      const p=S.produtos.find(x=>x.id===v.item_id);
-      if(!p) return;
+      const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
       if(!porProd[p.id]) porProd[p.id]={nome:p.nome,cat:p.categoria,cmv:0,vendido:0,cortesia:0,receita:0};
       porProd[p.id].cmv+=qtd*(p.preco_compra||0);
-      porProd[p.id].vendido+=qv;
-      porProd[p.id].cortesia+=qc;
+      porProd[p.id].vendido+=qv;porProd[p.id].cortesia+=qc;
       porProd[p.id].receita+=qv*(p.preco_venda||0);
     }
     if(v.tipo==="ficha"){
-      const f=S.fichas.find(x=>x.id===v.item_id);
-      if(!f||!f.ingredientes) return;
+      const f=S.fichas.find(x=>x.id===v.item_id);if(!f||!f.ingredientes)return;
       f.ingredientes.forEach(ing=>{
         const p=S.produtos.find(x=>x.id===ing.produto_id);
-        if(!p||!p.preco_compra||!p.capacidade_ml) return;
+        if(!p||!p.preco_compra||!p.capacidade_ml)return;
         const custo=qtd*(ing.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
         if(!porProd[p.id]) porProd[p.id]={nome:p.nome,cat:p.categoria,cmv:0,vendido:0,cortesia:0,receita:0,via_ficha:true};
         porProd[p.id].cmv+=custo;
       });
-      if(!porProd["ficha_"+f.id]) porProd["ficha_"+f.id]={nome:f.nome+"  (drink)",cat:f.categoria,cmv:0,vendido:0,cortesia:0,receita:0,is_ficha:true};
-      porProd["ficha_"+f.id].vendido+=qv;
-      porProd["ficha_"+f.id].cortesia+=qc;
+      if(!porProd["ficha_"+f.id]) porProd["ficha_"+f.id]={nome:f.nome+" (drink)",cat:f.categoria,cmv:0,vendido:0,cortesia:0,receita:0,is_ficha:true};
+      porProd["ficha_"+f.id].vendido+=qv;porProd["ficha_"+f.id].cortesia+=qc;
       porProd["ficha_"+f.id].receita+=qv*(f.preco_venda||0);
       porProd["ficha_"+f.id].cmv+=calcCustoFicha(f)*qtd;
     }
   });
-
   const prodRows=Object.values(porProd).sort((a,b)=>b.cmv-a.cmv);
+  const top10=prodRows.slice(0,15);
 
   set("p-cmv",`
-    <div class="eyebrow">ANÁLISE</div>
-    <div class="pg-t">CMV por Produto</div>
+    <div class="eyebrow">ANÁLISE DE CUSTO</div>
+    <div class="pg-t">CMV Detalhado</div>
     <div class="kpis">
-      ${kpi("CMV Total Período",R(tCmv),"","#e6edf3","#2563eb")}
+      ${kpi("CMV Total",R(tCmv),"período completo","#e6edf3","#2563eb")}
       ${kpi("CMV%",tRec?P(tCmv/tRec):"—",tRec?(tCmv/tRec>0.28?"⚠ Acima meta":"✓ Dentro meta"):"",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e")}
-      ${kpi("Faturamento Bar",R(calcs.reduce((s,e)=>s+e.rec_bar,0)),"sem cobertura","#e6edf3","#8b5cf6")}
+      ${kpi("Custo Cortesias",R(tCortesia),"impacto no CMV","#f59e0b","#f59e0b")}
+      ${kpi("Rec. Bar",R(calcs.reduce((s,e)=>s+e.rec_bar,0)),"sem cobertura","#e6edf3","#8b5cf6")}
     </div>
-    <div class="box">
-      <div class="bh"><span class="bt">CMV por Produto / Drink</span></div>
+
+    ${catRows.length?`<div class="box">
+      <div class="bh"><span class="bt">CMV por Categoria</span></div>
       <div class="tw"><table>
-        <thead><tr><th>Item</th><th>Categoria</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">Receita</th><th class="r">CMV</th><th class="r">CMV%</th></tr></thead>
-        <tbody>${prodRows.length?prodRows.map(r=>`<tr>
+        <thead><tr><th>Categoria</th><th class="r">CMV R$</th><th class="r">CMV%</th><th class="r">Receita</th><th class="r">Participação</th></tr></thead>
+        <tbody>${catRows.map(r=>`<tr>
+          <td class="w6">${r.cat}</td>
+          <td class="r mn w6">${Rf(r.cmv)}</td>
+          <td class="r">${r.receita?chip(P(r.cmv/r.receita),r.cmv/r.receita>0.35?"#ef4444":r.cmv/r.receita>0.25?"#f59e0b":"#22c55e"):"—"}</td>
+          <td class="r mn">${r.receita?R(r.receita):"—"}</td>
+          <td class="r">
+            <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">
+              <div class="prog" style="width:60px"><div class="pf" style="width:${tCmv?(r.cmv/tCmv*100).toFixed(1):0}%;background:#2563eb"></div></div>
+              <span style="font-family:monospace;font-size:10px;color:#484f58">${tCmv?P(r.cmv/tCmv):"—"}</span>
+            </div>
+          </td>
+        </tr>`).join("")}
+        </tbody>
+      </table></div>
+    </div>`:""}
+
+    <div class="box">
+      <div class="bh"><span class="bt">Top ${top10.length} por CMV</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Item</th><th>Categoria</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">Receita</th><th class="r">CMV R$</th><th class="r">CMV%</th></tr></thead>
+        <tbody>${top10.length?top10.map(r=>`<tr>
           <td class="w6">${r.nome}</td>
           <td class="mt">${r.cat||""}</td>
           <td class="r mn">${r.vendido||"—"}</td>
@@ -1088,6 +1326,258 @@ function renderCMV(){
       </table></div>
     </div>
   `);
+}
+
+
+// ── INVENTÁRIO SEMANAL ────────────────────────────────────────────────────────
+let invSem="S1",invData="",invSaving=false,invContagens={};
+
+function renderInventario(){
+  const semOpts=["S1","S2","S3","S4"];
+  const historico=S.inventarios.sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+
+  let rows=S.produtos.filter(p=>p.capacidade_ml&&p.preco_compra)
+    .sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.nome.localeCompare(b.nome));
+
+  set("p-inv",`
+    <div class="pg-h">
+      <div><div class="eyebrow">CONTROLE FÍSICO</div><div class="pg-t">Inventário Semanal</div></div>
+    </div>
+    <div class="fb">
+      <div class="ft">Nova Contagem</div>
+      <div class="fg g3" style="margin-bottom:12px">
+        <div class="fi"><label>Semana</label><select id="inv-sem" onchange="invSem=this.value">
+          ${semOpts.map(s=>`<option${invSem===s?" selected":""}>${s}</option>`).join("")}
+        </select></div>
+        <div class="fi"><label>Data da Contagem</label><input id="inv-data" value="${invData}" placeholder="dd/mm" oninput="invData=this.value"></div>
+        <div class="fi" style="justify-content:flex-end;flex-direction:row;align-items:flex-end">
+          <button class="btn bp" onclick="salvarInventario()">💾 Salvar Inventário</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#484f58;margin-bottom:10px">
+        Preencha a <strong>contagem física</strong> (un). Deixe em branco para produtos não contados.
+        <span style="float:right">Mostrando apenas produtos com custo e capacidade cadastrados (${rows.length})</span>
+      </div>
+      <div class="tw"><table>
+        <thead><tr>
+          <th>Produto</th><th>Cat.</th>
+          <th class="r">Teórico</th>
+          <th class="r">Físico</th>
+          <th class="r">Desvio</th>
+          <th class="r">R$ Desvio</th>
+        </tr></thead>
+        <tbody>${rows.map(p=>{
+          const teo=estoqueAtual(p.id);
+          const key=p.id;
+          const fis=invContagens[key]!==undefined?invContagens[key]:"";
+          const desvio=fis!==""?parseFloat(fis)-teo:null;
+          const dVal=desvio!==null?desvio*(p.preco_compra||0):null;
+          const dc=desvio===null?"":desvio>0.5?"inv-ok":desvio<-0.5?"inv-bad":"inv-warn";
+          return`<tr>
+            <td class="w6">${p.nome}</td>
+            <td class="mt" style="font-size:10px">${p.categoria||""}</td>
+            <td class="r mn">${teo.toFixed(2)} ${p.unidade||"un"}</td>
+            <td><input class="bulk-inp" type="number" step="0.5" placeholder="—" value="${fis}"
+              oninput="invContagens['${key}']=this.value===''?undefined:parseFloat(this.value);updateInvRow(this,'${key}',${teo},${p.preco_compra||0})"
+              style="width:80px"></td>
+            <td class="r mn ${dc}" id="inv-dev-${key}">${desvio!==null?desvio.toFixed(2)+" "+(p.unidade||"un"):"—"}</td>
+            <td class="r mn ${dc}" id="inv-val-${key}">${dVal!==null?Rf(dVal):"—"}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>
+
+    ${historico.length?`<div class="box">
+      <div class="bh"><span class="bt">Histórico de Inventários</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Data</th><th>Semana</th><th class="r">Itens contados</th><th class="r">Desvio total R$</th><th class="r">Status</th></tr></thead>
+        <tbody>${historico.map(inv=>{
+          const n=Object.keys(inv.contagens||{}).length;
+          let dTot=0;
+          Object.entries(inv.contagens||{}).forEach(([pid,fis])=>{
+            const p=S.produtos.find(x=>x.id===pid);
+            if(p&&p.preco_compra) dTot+=(parseFloat(fis)-estoqueAtual(pid))*(p.preco_compra||0);
+          });
+          return`<tr>
+            <td class="mn">${inv.data||""}</td>
+            <td>${inv.semana||""}</td>
+            <td class="r">${n}</td>
+            <td class="r mn ${dTot<-50?"inv-bad":dTot>50?"inv-ok":"inv-warn"}">${Rf(dTot)}</td>
+            <td class="r">${chip(Math.abs(dTot)<100?"✓ OK":"⚠ Desvio",Math.abs(dTot)<100?"#22c55e":"#ef4444")}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>`:""
+    }
+  `);
+}
+
+function updateInvRow(input,pid,teo,custo){
+  const fis=input.value===""?null:parseFloat(input.value);
+  const devEl=document.getElementById("inv-dev-"+pid);
+  const valEl=document.getElementById("inv-val-"+pid);
+  if(fis===null){devEl.textContent="—";valEl.textContent="—";return;}
+  const d=fis-teo;
+  const dv=d*custo;
+  const cls=d>0.5?"inv-ok":d<-0.5?"inv-bad":"inv-warn";
+  devEl.textContent=d.toFixed(2);devEl.className="r mn "+cls;
+  valEl.textContent=Rf(dv);valEl.className="r mn "+cls;
+}
+
+async function salvarInventario(){
+  const data=el("inv-data")?.value||new Date().toLocaleDateString("pt-BR");
+  const contagens={};
+  Object.entries(invContagens).forEach(([k,v])=>{if(v!==undefined)contagens[k]=parseFloat(v)||0;});
+  if(!Object.keys(contagens).length){alert("Preencha ao menos uma contagem física.");return;}
+  await FS.save("inventarios",{id:null,semana:invSem,data,contagens});
+  invContagens={};
+  alert("Inventário salvo! "+Object.keys(contagens).length+" produtos contados.");
+}
+
+
+// ── FECHAMENTO MENSAL ─────────────────────────────────────────────────────────
+function renderFechamento(){
+  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const tRec=calcs.reduce((s,e)=>s+e.rec,0);
+  const tRecBar=calcs.reduce((s,e)=>s+e.rec_bar,0);
+  const tEntrada=calcs.reduce((s,e)=>s+(e.entrada||0),0);
+  const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
+  const tDir=calcs.reduce((s,e)=>s+e.dir,0);
+  const tf=totalFixo();
+  const tRes=calcs.reduce((s,e)=>s+e.res,0);
+  const tCompras=totalComprasMes();
+
+  const tCortesia=S.evento_vendas.reduce((s,v)=>{
+    const qc=v.qtd_cortesia||0;if(!qc)return s;
+    if(v.tipo==="produto"){const p=S.produtos.find(x=>x.id===v.item_id);return s+(p?qc*(p.preco_compra||0):0);}
+    if(v.tipo==="ficha"){const f=S.fichas.find(x=>x.id===v.item_id);return s+(f?qc*calcCustoFicha(f):0);}
+    return s;
+  },0);
+
+  const valEstoque=S.produtos.reduce((s,p)=>s+estoqueAtual(p.id)*(p.preco_compra||0),0);
+
+  set("p-fecha",`
+    <div class="pg-h">
+      <div><div class="eyebrow">CONSOLIDADO</div><div class="pg-t">Fechamento Mensal</div></div>
+      <button class="btn bp" onclick="exportarExcel()">⬇ Exportar Excel</button>
+    </div>
+
+    <div class="kpis">
+      ${kpi("Faturamento Total",R(tRec),calcs.length+" eventos","#e6edf3","#2563eb")}
+      ${kpi("CMV Total",R(tCmv),"CMV% "+P(tRec?tCmv/tRec:0),tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e")}
+      ${kpi("Resultado",R(tRes),"Margem "+P(tRec?tRes/tRec:0),tRes>0?"#22c55e":"#ef4444",tRes>0?"#22c55e":"#ef4444")}
+      ${kpi("Valor em Estoque",R(valEstoque),"custo atual","#e6edf3","#3b82f6")}
+    </div>
+
+    <div class="box">
+      <div class="bh"><span class="bt">DRE Mensal Consolidado</span></div>
+      <div class="bb">
+        ${[
+          {l:"Faturamento Bruto",v:R(tRec),bold:true,c:"#e6edf3"},
+          {l:"  Receita Bar",v:R(tRecBar),sub:true},
+          {l:"  Receita Entrada",v:R(tEntrada),sub:true},
+          {sep:true},
+          {l:"(–) CMV Total",v:"– "+R(tCmv),c:tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e"},
+          {l:"  Custo Cortesias incluído",v:R(tCortesia),sub:true,c:"#f59e0b"},
+          {sep:true},
+          {l:"= Margem Bruta",v:R(tRec-tCmv),bold:true,c:tRec-tCmv>0?"#e6edf3":"#ef4444"},
+          {l:"(–) Custos Diretos",v:"– "+R(tDir),c:"#8b949e"},
+          {l:"(–) Custos Fixos Totais",v:"– "+R(tf),c:"#484f58"},
+          {sep:true},
+          {l:"Resultado Líquido",v:R(tRes),bold:true,big:true,c:tRes>0?"#22c55e":"#ef4444"},
+        ].map(r=>r.sep?`<div class="fecha-sep"></div>`:`
+          <div class="fecha-row">
+            <span style="color:${r.c||"#8b949e"};font-size:${r.big?13:11}px;font-weight:${r.bold?700:400};padding-left:${r.sub?16:0}px">${r.l}</span>
+            <span style="font-family:monospace;font-size:${r.big?16:12}px;font-weight:${r.bold?700:400};color:${r.c||(r.v&&r.v.startsWith("–")?"#ef4444":"#e6edf3")}">${r.v}</span>
+          </div>`).join("")}
+        <div class="fecha-sep"></div>
+        <div class="fecha-row">
+          <span style="font-size:11px;color:#484f58">Compras do período</span>
+          <span style="font-family:monospace;font-size:12px;color:#8b949e">${R(tCompras)}</span>
+        </div>
+        <div class="fecha-row">
+          <span style="font-size:11px;color:#484f58">Valor em estoque atual</span>
+          <span style="font-family:monospace;font-size:12px;color:#3b82f6">${R(valEstoque)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="bh"><span class="bt">Resultado por Evento</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Data</th><th>Evento</th><th class="r">Faturamento</th><th class="r">CMV</th><th class="r">CMV%</th><th class="r">Custos Dir.</th><th class="r">Resultado</th><th class="r">Margem</th></tr></thead>
+        <tbody>${calcs.length?calcs.map(e=>`<tr>
+          <td class="mn mt">${e.data||""}</td>
+          <td class="w6">${e.nome||""}</td>
+          <td class="r mn">${R(e.rec)}</td>
+          <td class="r mn">${R(e.cmv)}</td>
+          <td class="r">${chip(P(e.cmvP),e.cmvP>0.30?"#ef4444":e.cmvP>0.28?"#f59e0b":"#22c55e")}</td>
+          <td class="r mn mt">${R(e.dir)}</td>
+          <td class="r mn" style="color:${e.res>0?"#22c55e":"#ef4444"};font-weight:700">${R(e.res)}</td>
+          <td class="r">${chip(P(Math.max(0,e.mg)),e.mg>0.20?"#22c55e":e.mg>0.10?"#f59e0b":"#ef4444")}</td>
+        </tr>`).join(""):`<tr><td colspan="8" class="empty">Nenhum evento registrado.</td></tr>`}
+        ${calcs.length?`<tr class="tr-tot">
+          <td colspan="2">TOTAL</td>
+          <td class="r mn">${R(tRec)}</td>
+          <td class="r mn">${R(tCmv)}</td>
+          <td class="r">${chip(P(tRec?tCmv/tRec:0),tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e")}</td>
+          <td class="r mn">${R(tDir)}</td>
+          <td class="r mn" style="color:${tRes>0?"#22c55e":"#ef4444"}">${R(tRes)}</td>
+          <td></td>
+        </tr>`:""
+        }
+        </tbody>
+      </table></div>
+    </div>
+  `);
+}
+
+function exportarExcel(){
+  if(!window.XLSX){alert("SheetJS não carregado.");return;}
+  const wb=XLSX.utils.book_new();
+
+  // Sheet 1: DRE por evento
+  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const ws1Data=[["Data","Evento","Faturamento","Rec.Bar","Entrada","CMV","CMV%","Custos Dir.","Fixo Rateado","Resultado","Margem%"]];
+  calcs.forEach(e=>ws1Data.push([e.data||"",e.nome||"",e.rec,e.rec_bar,e.entrada||0,e.cmv,+(e.cmvP*100).toFixed(1),e.dir,rateio(),e.res,+(Math.max(0,e.mg)*100).toFixed(1)]));
+  const totRec=calcs.reduce((s,e)=>s+e.rec,0);
+  ws1Data.push(["","TOTAL",totRec,calcs.reduce((s,e)=>s+e.rec_bar,0),calcs.reduce((s,e)=>s+(e.entrada||0),0),calcs.reduce((s,e)=>s+e.cmv,0),+(totRec?calcs.reduce((s,e)=>s+e.cmv,0)/totRec*100:0).toFixed(1),calcs.reduce((s,e)=>s+e.dir,0),rateio()*calcs.length,calcs.reduce((s,e)=>s+e.res,0),""]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws1Data),"Eventos");
+
+  // Sheet 2: Produtos CMV
+  const porProd={};
+  S.evento_vendas.forEach(v=>{
+    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0),qv=v.qtd_vendida||0,qc=v.qtd_cortesia||0;
+    if(v.tipo==="produto"){
+      const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
+      if(!porProd[p.id])porProd[p.id]={nome:p.nome,cat:p.categoria||"",cmv:0,vendido:0,cortesia:0,receita:0};
+      porProd[p.id].cmv+=qtd*(p.preco_compra||0);porProd[p.id].vendido+=qv;porProd[p.id].cortesia+=qc;porProd[p.id].receita+=qv*(p.preco_venda||0);
+    }
+  });
+  const ws2Data=[["Produto","Categoria","Qtd Vendida","Qtd Cortesia","Receita R$","CMV R$","CMV%"]];
+  Object.values(porProd).sort((a,b)=>b.cmv-a.cmv).forEach(r=>ws2Data.push([r.nome,r.cat,r.vendido,r.cortesia,r.receita,+r.cmv.toFixed(2),+(r.receita?r.cmv/r.receita*100:0).toFixed(1)]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws2Data),"CMV Produtos");
+
+  // Sheet 3: Compras
+  const ws3Data=[["Produto","Semana","Data","Qtd","Custo Unit","Total","Fornecedor"]];
+  S.compras.forEach(c=>{
+    const p=S.produtos.find(x=>x.id===c.produto_id);
+    ws3Data.push([p?p.nome:c.produto_id,c.sem||"",c.data||"",c.qtd||0,c.custo_unit||0,c.total||0,c.forn||""]);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws3Data),"Compras");
+
+  // Sheet 4: Estoque
+  const ws4Data=[["Produto","Categoria","Unidade","Estoque Teórico","Custo Unit","Valor Estoque","Mínimo","Status"]];
+  S.produtos.forEach(p=>{
+    const at=estoqueAtual(p.id);
+    const alr=(p.estoque_min||0)>0&&at<(p.estoque_min||0);
+    ws4Data.push([p.nome,p.categoria||"",p.unidade||"",+at.toFixed(2),p.preco_compra||0,+(at*(p.preco_compra||0)).toFixed(2),p.estoque_min||0,alr?"ABAIXO":"OK"]);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws4Data),"Estoque");
+
+  XLSX.writeFile(wb,"Mahau_Fechamento_"+new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")+".xlsx");
 }
 
 // ── PRÉ-CADASTRO ──────────────────────────────────────────────────────────────
@@ -1511,6 +2001,7 @@ function init(){
     FS.listen("eventos",   d=>{S.eventos=d;render();});
     FS.listen("evento_vendas",d=>{S.evento_vendas=d;render();});
     FS.listen("custos",d=>{S.custos=d;render();});
+    FS.listen("inventarios",d=>{S.inventarios=d;render();});
     db.collection("config").doc("settings").onSnapshot(s=>{
       if(s.exists)S.config=s.data();render();
     });

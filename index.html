@@ -111,6 +111,17 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
 }
 @media(min-width:681px){#bnav{display:none!important}#sb{display:flex}}
 
+
+/* seletor de mês */
+#month-bar{display:flex;align-items:center;gap:8px;background:#161b22;border:1px solid #21262d;border-radius:8px;padding:8px 12px;margin-bottom:14px;flex-wrap:wrap}
+.mb-label{font-size:9px;color:#484f58;font-weight:600;letter-spacing:.8px;text-transform:uppercase;white-space:nowrap}
+.mb-sel{background:#0d1117;border:1px solid #2d333b;border-radius:5px;padding:6px 10px;color:#e6edf3;font-size:13px;font-weight:600;font-family:monospace;outline:none;cursor:pointer;-webkit-appearance:none}
+.mb-btn{background:transparent;border:1px solid #21262d;border-radius:5px;padding:5px 8px;color:#8b949e;cursor:pointer;font-size:13px;line-height:1}
+.mb-btn:hover{border-color:#2563eb;color:#2563eb}
+.mb-badge{font-size:10px;padding:3px 8px;border-radius:20px;font-weight:600;white-space:nowrap}
+.mb-all{background:#2563eb18;color:#3b82f6;border:1px solid #2563eb30}
+.mb-mes{background:#22c55e18;color:#22c55e;border:1px solid #22c55e30}
+.mb-sep{flex:1}
 /* bulk edit */
 .bulk-inp{background:#0d1117;border:1px solid #2d333b;border-radius:4px;padding:5px 7px;color:#e6edf3;font-size:11px;font-family:monospace;width:100%;-webkit-appearance:none;outline:none}
 .bulk-inp:focus{border-color:#2563eb}
@@ -143,6 +154,7 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
   </div>
 </div>
 <div id="main">
+  <div id="month-bar"></div>
   <div id="p-dash"    class="page on"></div>
   <div id="p-prod"    class="page"></div>
   <div id="p-fichas"  class="page"></div>
@@ -208,7 +220,8 @@ const FS = {
 const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
-  evento_vendas:[],custos:[],inventarios:[],config:{datasNoMes:4}
+  evento_vendas:[],custos:[],inventarios:[],config:{datasNoMes:4},
+  mesSel:null  // null = todos os meses
 };
 
 // ── FORMATTERS ────────────────────────────────────────────────────────────────
@@ -220,6 +233,75 @@ const el  = id=>document.getElementById(id);
 const set = (id,h)=>{const e=el(id);if(e)e.innerHTML=h;};
 const nv  = id=>parseFloat(el(id)?.value)||0;
 const sv  = id=>el(id)?.value||"";
+
+
+// ── SELETOR DE MÊS ────────────────────────────────────────────────────────────
+function mesesDisponiveis(){
+  const set=new Set();
+  S.eventos.forEach(e=>{if(e.data)set.add(e.data.slice(0,7))});
+  S.compras.forEach(c=>{if(c.data)set.add(c.data.slice(0,7))});
+  S.inventarios.forEach(i=>{if(i.data)set.add(i.data.slice(0,7))});
+  S.custos.forEach(c=>{if(c.mes)set.add(c.mes)});
+  return [...set].sort().reverse();
+}
+
+function fmtMes(ym){
+  // ym = "2025-05" → "Mai 2025"
+  if(!ym) return "";
+  const [y,m]=ym.split("-");
+  const nomes=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  return `${nomes[parseInt(m)]} ${y}`;
+}
+
+function mesAtivo(){return S.mesSel;}
+
+// Filtra por mês: retorna true se o item pertence ao mês selecionado
+function noMes(dateStr){
+  if(!S.mesSel) return true; // todos
+  if(!dateStr) return false;
+  return dateStr.slice(0,7)===S.mesSel;
+}
+
+function renderMonthBar(){
+  const meses=mesesDisponiveis();
+  const hoje=new Date();
+  const mesAtualYM=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}`;
+
+  const opts=meses.map(m=>`<option value="${m}"${S.mesSel===m?" selected":""}>${fmtMes(m)}</option>`).join("");
+
+  const evCount=S.eventos.filter(e=>noMes(e.data)).length;
+  const badge=S.mesSel
+    ?`<span class="mb-badge mb-mes">${evCount} evento${evCount!==1?"s":""}</span>`
+    :`<span class="mb-badge mb-all">Todos os meses · ${S.eventos.length} eventos</span>`;
+
+  set("month-bar",`
+    <span class="mb-label">Período</span>
+    <button class="mb-btn" onclick="navMes(-1)" title="Mês anterior">◀</button>
+    <select class="mb-sel" onchange="S.mesSel=this.value||null;render()">
+      <option value=""${!S.mesSel?" selected":""}>Todos os meses</option>
+      ${opts}
+    </select>
+    <button class="mb-btn" onclick="navMes(1)" title="Próximo mês">▶</button>
+    <button class="mb-btn" onclick="S.mesSel=mesAtualYM;render()" title="Mês atual" style="font-size:10px;padding:5px 9px;font-weight:600">HOJE</button>
+    <span class="mb-sep"></span>
+    ${badge}
+    ${S.mesSel?`<button class="mb-btn" onclick="S.mesSel=null;render()" style="font-size:10px;padding:5px 9px">✕ Limpar</button>`:""}
+  `);
+}
+
+function navMes(delta){
+  const meses=mesesDisponiveis();
+  if(!meses.length) return;
+  if(!S.mesSel){
+    S.mesSel = delta<0 ? meses[0] : meses[meses.length-1];
+  } else {
+    const idx=meses.indexOf(S.mesSel);
+    // meses está em ordem decrescente (mais recente primeiro)
+    const next=idx-delta; // inverso pq desc
+    if(next>=0&&next<meses.length) S.mesSel=meses[next];
+  }
+  render();
+}
 
 // ── CALCS ─────────────────────────────────────────────────────────────────────
 function estoqueAtual(pid) {
@@ -284,9 +366,9 @@ function alertasEstoque() {
   });
 }
 
-const totalFixo=()=>S.custos.reduce((s,c)=>s+(c.valor||0),0);
+const totalFixo=()=>S.custos.filter(c=>!S.mesSel||(c.mes&&c.mes===S.mesSel)).reduce((s,c)=>s+(c.valor||0),0);
 const rateio=()=>S.config.datasNoMes>0?(totalFixo()/S.config.datasNoMes):0;
-const totalComprasMes=()=>S.compras.reduce((s,c)=>s+(c.total||0),0);
+const totalComprasMes=()=>S.compras.filter(c=>noMes(c.data)).reduce((s,c)=>s+(c.total||0),0);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 const PAGES=[
@@ -319,7 +401,7 @@ function go(id){
 }
 
 function renderSidebar(){
-  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const calcs=S.eventos.filter(e=>noMes(e.data)).map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tRes=calcs.reduce((s,e)=>s+e.res,0);
   const cmvP=tRec?calcs.reduce((s,e)=>s+e.cmv,0)/tRec:0;
@@ -331,6 +413,7 @@ function renderSidebar(){
 }
 
 function render(){
+  renderMonthBar();
   renderSidebar();
   const p=S.page;
   if(p==="dash")    renderDash();
@@ -355,7 +438,7 @@ function kpi(title,value,sub,color,accent){
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDash(){
-  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const calcs=S.eventos.filter(e=>noMes(e.data)).map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
   const tRes=calcs.reduce((s,e)=>s+e.res,0);
@@ -935,7 +1018,7 @@ let evForm=null,evSel=null,evVendaEv=null;
 const EV0={data:"",nome:"",publico:0,vips:0,entrada:0,dj:0,seguranca:0,staff:0,outros:0};
 
 function renderEventos(){
-  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const calcs=S.eventos.filter(e=>noMes(e.data)).map(e=>({...e,...calcEv(e)}));
   const selC=calcs.find(e=>e.id===evSel);
 
   const formHTML=evForm!==null?`<div class="fb">
@@ -1183,6 +1266,7 @@ function renderCustos(){
       <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
         <div class="fi" style="flex:2;min-width:150px"><label>Nome do Custo</label><input id="cf-nome" placeholder="Ex: Aluguel"></div>
         <div class="fi" style="flex:1;min-width:110px"><label>Valor Mensal (R$)</label><input id="cf-val" type="number" placeholder="0"></div>
+        <div class="fi" style="min-width:110px"><label>Mês (AAAA-MM)</label><input id="cf-mes" placeholder="2025-05"></div>
         <button class="btn bp" onclick="addCusto()">+ Adicionar</button>
       </div>
     </div>
@@ -1215,14 +1299,15 @@ function renderCustos(){
 function addCusto(){
   const nome=el("cf-nome")?.value.trim();
   const valor=parseFloat(el("cf-val")?.value)||0;
+  const mes=el("cf-mes")?.value||S.mesSel||new Date().toISOString().slice(0,7);
   if(!nome||!valor) return;
-  FS.save("custos",{id:"c_"+Date.now(),nome,valor});
+  FS.save("custos",{id:"c_"+Date.now(),nome,valor,mes});
   el("cf-nome").value=""; el("cf-val").value="";
 }
 
 // ── CMV ─────────────────────────────────────────────────────────────────────
 function renderCMV(){
-  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const calcs=S.eventos.filter(e=>noMes(e.data)).map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
   const tCortesia=S.evento_vendas.reduce((s,v)=>{
@@ -1232,9 +1317,10 @@ function renderCMV(){
     return s;
   },0);
 
+  const evIdsMes=new Set(calcs.map(e=>e.id));
   // CMV por categoria
   const porCat={};
-  S.evento_vendas.forEach(v=>{
+  S.evento_vendas.filter(v=>evIdsMes.has(v.evento_id)).forEach(v=>{
     const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0),qv=v.qtd_vendida||0;
     let cat="Outros",cmvI=0,recI=0;
     if(v.tipo==="produto"){
@@ -1334,7 +1420,7 @@ let invSem="S1",invData="",invSaving=false,invContagens={};
 
 function renderInventario(){
   const semOpts=["S1","S2","S3","S4"];
-  const historico=S.inventarios.sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const historico=S.inventarios.filter(i=>noMes(i.data)).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
 
   let rows=S.produtos.filter(p=>p.capacidade_ml&&p.preco_compra)
     .sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.nome.localeCompare(b.nome));
@@ -1439,7 +1525,7 @@ async function salvarInventario(){
 
 // ── FECHAMENTO MENSAL ─────────────────────────────────────────────────────────
 function renderFechamento(){
-  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const calcs=S.eventos.filter(e=>noMes(e.data)).map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.rec,0);
   const tRecBar=calcs.reduce((s,e)=>s+e.rec_bar,0);
   const tEntrada=calcs.reduce((s,e)=>s+(e.entrada||0),0);
@@ -1449,7 +1535,8 @@ function renderFechamento(){
   const tRes=calcs.reduce((s,e)=>s+e.res,0);
   const tCompras=totalComprasMes();
 
-  const tCortesia=S.evento_vendas.reduce((s,v)=>{
+  const evIds2=new Set(calcs.map(e=>e.id));
+  const tCortesia=S.evento_vendas.filter(v=>evIds2.has(v.evento_id)).reduce((s,v)=>{
     const qc=v.qtd_cortesia||0;if(!qc)return s;
     if(v.tipo==="produto"){const p=S.produtos.find(x=>x.id===v.item_id);return s+(p?qc*(p.preco_compra||0):0);}
     if(v.tipo==="ficha"){const f=S.fichas.find(x=>x.id===v.item_id);return s+(f?qc*calcCustoFicha(f):0);}
@@ -1539,7 +1626,7 @@ function exportarExcel(){
   const wb=XLSX.utils.book_new();
 
   // Sheet 1: DRE por evento
-  const calcs=S.eventos.map(e=>({...e,...calcEv(e)}));
+  const calcs=S.eventos.filter(e=>noMes(e.data)).map(e=>({...e,...calcEv(e)}));
   const ws1Data=[["Data","Evento","Faturamento","Rec.Bar","Entrada","CMV","CMV%","Custos Dir.","Fixo Rateado","Resultado","Margem%"]];
   calcs.forEach(e=>ws1Data.push([e.data||"",e.nome||"",e.rec,e.rec_bar,e.entrada||0,e.cmv,+(e.cmvP*100).toFixed(1),e.dir,rateio(),e.res,+(Math.max(0,e.mg)*100).toFixed(1)]));
   const totRec=calcs.reduce((s,e)=>s+e.rec,0);
@@ -1547,8 +1634,9 @@ function exportarExcel(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws1Data),"Eventos");
 
   // Sheet 2: Produtos CMV
+  const evIds3=new Set(calcs.map(e=>e.id));
   const porProd={};
-  S.evento_vendas.forEach(v=>{
+  S.evento_vendas.filter(v=>evIds3.has(v.evento_id)).forEach(v=>{
     const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0),qv=v.qtd_vendida||0,qc=v.qtd_cortesia||0;
     if(v.tipo==="produto"){
       const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
@@ -1562,7 +1650,7 @@ function exportarExcel(){
 
   // Sheet 3: Compras
   const ws3Data=[["Produto","Semana","Data","Qtd","Custo Unit","Total","Fornecedor"]];
-  S.compras.forEach(c=>{
+  S.compras.filter(c=>noMes(c.data)).forEach(c=>{
     const p=S.produtos.find(x=>x.id===c.produto_id);
     ws3Data.push([p?p.nome:c.produto_id,c.sem||"",c.data||"",c.qtd||0,c.custo_unit||0,c.total||0,c.forn||""]);
   });

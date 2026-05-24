@@ -134,6 +134,17 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
 /* fechamento */
 .fecha-sep{border-top:1px solid #21262d;margin:8px 0}
 .fecha-row{display:flex;justify-content:space-between;padding:4px 0;font-size:12px}
+/* modal confirmação destrutiva */
+.dlg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(3px)}
+.dlg-box{background:#161b22;border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:26px 24px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.dlg-warn{font-size:26px;text-align:center;margin-bottom:10px}
+.dlg-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:8px;color:#e6edf3}
+.dlg-desc{font-size:12px;color:#8b949e;text-align:center;margin-bottom:18px;line-height:1.65}
+.dlg-desc strong{color:#ef4444}
+.dlg-inp{width:100%;background:#0d1117;border:2px solid #2d333b;border-radius:6px;padding:10px 12px;color:#e6edf3;font-size:17px;font-family:monospace;font-weight:700;text-align:center;outline:none;margin-bottom:16px;letter-spacing:3px;transition:border-color .15s}
+.dlg-inp:focus{border-color:#ef4444}
+.dlg-inp.ok{border-color:#22c55e;color:#22c55e}
+.dlg-btns{display:flex;gap:8px;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -215,6 +226,47 @@ const FS = {
   setDoc: (col,id,d)  => db&&db.collection(col).doc(id).set(d,{merge:true}),
   listen: (col,cb)    => db?db.collection(col).onSnapshot(s=>cb(s.docs.map(d=>d.data()))):null,
 };
+
+// ── CONFIRMAÇÃO DESTRUTIVA ────────────────────────────────────────────────────
+function confirmarLimpar(cb) {
+  const ov = document.createElement('div');
+  ov.className = 'dlg-overlay';
+  ov.innerHTML = `
+    <div class="dlg-box">
+      <div class="dlg-warn">⚠</div>
+      <div class="dlg-title">Confirmar exclusão permanente</div>
+      <div class="dlg-desc">Esta ação <strong>não pode ser desfeita</strong>.<br>
+        Digite <strong>LIMPAR</strong> em maiúsculas para confirmar:</div>
+      <input class="dlg-inp" id="_dlg_inp" type="text" autocomplete="off" spellcheck="false" placeholder="LIMPAR">
+      <div class="dlg-btns">
+        <button class="btn bg_" id="_dlg_cancel">Cancelar</button>
+        <button class="btn bd_" id="_dlg_ok" disabled>Excluir</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const inp = ov.querySelector('#_dlg_inp');
+  const btnOk = ov.querySelector('#_dlg_ok');
+  const btnCancel = ov.querySelector('#_dlg_cancel');
+
+  setTimeout(() => inp.focus(), 30);
+
+  function fechar() { ov.remove(); }
+  function confirmar() { fechar(); cb(); }
+
+  inp.addEventListener('input', () => {
+    const ok = inp.value === 'LIMPAR';
+    btnOk.disabled = !ok;
+    inp.classList.toggle('ok', ok);
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !btnOk.disabled) confirmar();
+    if (e.key === 'Escape') fechar();
+  });
+  btnOk.addEventListener('click', confirmar);
+  btnCancel.addEventListener('click', fechar);
+  ov.addEventListener('click', e => { if (e.target === ov) fechar(); });
+}
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -574,7 +626,7 @@ function renderProd(){
             <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${atual.toFixed(1)}</td>
             <td style="white-space:nowrap">
               <button class="bi" onclick="prodForm={...S.produtos.find(x=>x.id==='${p.id}')};renderProd()">✏</button>
-              <button class="bi" onclick="if(confirm('Excluir?'))FS.del('produtos','${p.id}')">✕</button>
+              <button class="bi" onclick="confirmarLimpar(()=>FS.del('produtos','${p.id}'))">✕</button>
             </td>
           </tr>`;
         }).join(""):"<tr><td colspan='9' class='empty'>Nenhum produto cadastrado.</td></tr>"}
@@ -734,7 +786,7 @@ function renderFichas(){
             }).join(" + ")||"—"}</td>
             <td style="white-space:nowrap">
               <button class="bi" onclick="fichaForm={...JSON.parse(JSON.stringify(S.fichas.find(x=>x.id==='${f.id}')))};renderFichas()">✏</button>
-              <button class="bi" onclick="if(confirm('Excluir?'))FS.del('fichas','${f.id}')">✕</button>
+              <button class="bi" onclick="confirmarLimpar(()=>FS.del('fichas','${f.id}'))">✕</button>
             </td>
           </tr>`;
         }).join(""):"<tr><td colspan='7' class='empty'>Nenhuma ficha cadastrada.</td></tr>"}
@@ -985,7 +1037,7 @@ function renderCompras(){
               <td class="r mn mt">${c.custo_unit?Rf(c.custo_unit):"—"}</td>
               <td class="r mn w6">${R(c.total)}</td>
               <td class="mt">${c.forn||""}</td>
-              <td><button class="bi" onclick="if(confirm('Excluir?'))FS.del('compras','${c.id}')">✕</button></td>
+              <td><button class="bi" onclick="confirmarLimpar(()=>FS.del('compras','${c.id}'))">✕</button></td>
             </tr>`;
           }).join("")}</tbody>
         </table></div>
@@ -1065,7 +1117,7 @@ function renderEventos(){
         <div style="margin-left:auto;display:flex;gap:5px">
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evVendaEv=evSel===e.id?e.id:e.id;evSel=e.id;renderEventos()">📋 Vendas</button>
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evForm={...S.eventos.find(x=>x.id==='${e.id}')};renderEventos()">✏</button>
-          <button class="btn bd_ bsm" onclick="event.stopPropagation();if(confirm('Excluir?')){FS.del('eventos','${e.id}');if(evSel==='${e.id}')evSel=null;}">✕</button>
+          <button class="btn bd_ bsm" onclick="event.stopPropagation();confirmarLimpar(()=>{FS.del('eventos','${e.id}');if(evSel==='${e.id}')evSel=null;})">✕</button>
         </div>
       </div>
     </div>`).join(""):`<div class="box"><div class="empty">Nenhum evento. Clique em "+ Novo Evento".</div></div>`;
@@ -1181,7 +1233,7 @@ function renderVendasEvento(e){
           <td class="r mn" style="color:${(v.qtd_cortesia||0)>0?"#f59e0b":"#484f58"}">${v.qtd_cortesia||0}</td>
           <td class="r mn">${Rf(cmvI)}</td>
           <td class="r mn">${Rf(recI)}</td>
-          <td><button class="bi" onclick="if(confirm('Excluir?'))FS.del('evento_vendas','${v.id}')">✕</button></td>
+          <td><button class="bi" onclick="confirmarLimpar(()=>FS.del('evento_vendas','${v.id}'))">✕</button></td>
         </tr>`;
       }).join(""):`<tr><td colspan="7" class="empty">Nenhuma venda registrada. Clique em "+ Adicionar Item".</td></tr>`}
       </tbody>
@@ -1283,7 +1335,7 @@ function renderCustos(){
               <span style="font-family:monospace;font-size:10px;color:#484f58">${P(tf?c.valor/tf:0)}</span>
             </div>
           </td>
-          <td><button class="bi" onclick="if(confirm('Excluir?'))FS.del('custos','${c.id}')">✕</button></td>
+          <td><button class="bi" onclick="confirmarLimpar(()=>FS.del('custos','${c.id}'))">✕</button></td>
         </tr>`).join(""):`<tr><td colspan="5" class="empty">Nenhum custo fixo cadastrado.</td></tr>`}
         ${S.custos.length?`<tr class="tr-tot">
           <td>Total</td>

@@ -29,6 +29,12 @@ const Domain = {
     return m ? m[1] : "";
   },
 
+  // Fonte única dos campos de criação de um documento. Usada pelo FS.save E pelos
+  // writers diretos (importZigPay, seeds). ts = firebase serverTimestamp().
+  camposCriacao(data, ts){
+    return {...(data||{}), orgId:(data&&data.orgId)||"default", createdAt:ts, updatedAt:ts};
+  },
+
   // Índice de movimentação de estoque construído em UMA passada.
   // Retorna { [produtoId]: { entradasMl, consumoMl } }. Tudo em ml.
   estoqueIndex(produtos, fichas, compras, vendas){

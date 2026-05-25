@@ -267,8 +267,8 @@ const FS = {
       const ts = firebase.firestore.FieldValue.serverTimestamp();
       // Update usa merge:true para não apagar createdAt/orgId (e campos futuros) no overwrite.
       if(data.id) await db.collection(col).doc(String(data.id)).set({...data, updatedAt:ts}, {merge:true});
-      // orgId carimbado na criação (groundwork multi-tenant; app ainda não filtra por ele).
-      else { const r=await db.collection(col).add({...data, orgId:data.orgId||"default", createdAt:ts, updatedAt:ts}); await r.update({id:r.id}); }
+      // Campos de criação (orgId/createdAt/updatedAt) via fonte única Domain.camposCriacao.
+      else { const r=await db.collection(col).add(Domain.camposCriacao(data, ts)); await r.update({id:r.id}); }
       return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
@@ -2037,14 +2037,15 @@ async function seedIfEmpty(force=false){
     const batch_size = 50;
     for(let i=0; i<ZIGPAY_PRODUTOS.length; i+=batch_size){
       const batch = db.batch();
+      const ts = firebase.firestore.FieldValue.serverTimestamp();
       ZIGPAY_PRODUTOS.slice(i,i+batch_size).forEach(p=>{
         const ref = db.collection("produtos").doc();
-        batch.set(ref, {
+        batch.set(ref, Domain.camposCriacao({
           nome:p.nome, categoria:p.categoria,
           preco_venda:p.preco_venda, preco_compra:0,
           capacidade_ml:0, unidade:p.unidade||"un",
           estoque_min:0, estoque_inicial:0, id:ref.id
-        });
+        }, ts));
       });
       await batch.commit();
       if(seedBtn) seedBtn.textContent=`Cadastrando... ${Math.min(i+batch_size,ZIGPAY_PRODUTOS.length)}/${ZIGPAY_PRODUTOS.length}`;
@@ -2134,6 +2135,7 @@ function importZigPay() {
 
     // Create event
     const mes = mesDeData(data);
+    const ts = firebase.firestore.FieldValue.serverTimestamp();
     const ev = {
       id: null,
       data, mes, nome,
@@ -2148,7 +2150,7 @@ function importZigPay() {
       origem:   'zigpay',
     };
 
-    const evRef = await db.collection('eventos').add(ev);
+    const evRef = await db.collection('eventos').add(Domain.camposCriacao(ev, ts));
     await evRef.update({id: evRef.id});
 
     // Create vendas - try to match products
@@ -2165,7 +2167,7 @@ function importZigPay() {
         nomeLow.includes(f.nome.toLowerCase())
       );
 
-      const vRef = await db.collection('evento_vendas').add({
+      const vRef = await db.collection('evento_vendas').add(Domain.camposCriacao({
         id: null,
         evento_id:    evRef.id,
         mes,
@@ -2177,7 +2179,7 @@ function importZigPay() {
         qtd_cortesia: 0,
         valor_unit:   item.vUnit,
         valor_total:  item.vTotal,
-      });
+      }, ts));
       await vRef.update({id: vRef.id}); // write-back do id (corrige vendas inalcançáveis)
     }
 
@@ -2263,14 +2265,16 @@ async function seedCombos(){
       {produto_id: mixer.id,   nome_prod: mixer.nome,   quantidade_ml: mixer.capacidade_ml||250,  tipo:"mixer",   qtd_unidades:5},
     ];
 
-    await db.collection("fichas").add({
+    const ts = firebase.firestore.FieldValue.serverTimestamp();
+    const fRef = await db.collection("fichas").add(Domain.camposCriacao({
       nome: combo.nome,
       categoria: combo.cat,
       preco_venda: combo.venda,
       tipo_combo: combo.tonica?"tonica":"redbull",
       ingredientes: ings,
       origem: "combo_seed",
-    });
+    }, ts));
+    await fRef.update({id: fRef.id}); // write-back do id (corrige fichas inalcançáveis)
     count++;
   }
   console.log("Combos cadastrados:", count);

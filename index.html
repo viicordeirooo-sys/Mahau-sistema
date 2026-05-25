@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="domain.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#e6edf3;font-family:system-ui,-apple-system,sans-serif;font-size:13px}
@@ -391,12 +392,8 @@ function fmtMes(ym){
 
 function mesAtivo(){return S.mesSel;}
 
-// Filtra por mês: retorna true se o item pertence ao mês selecionado
-function noMes(dateStr){
-  if(!S.mesSel) return true; // todos
-  if(!dateStr) return false;
-  return dateStr.slice(0,7)===S.mesSel;
-}
+// Filtra por mês (wrapper de Domain.noMes com o mês selecionado de S).
+function noMes(dateStr){ return Domain.noMes(dateStr, S.mesSel); }
 
 function renderMonthBar(){
   const meses=mesesDisponiveis();
@@ -439,99 +436,27 @@ function navMes(delta){
   render();
 }
 
-// ── CALCS ─────────────────────────────────────────────────────────────────────
-// Índice memoizado de movimentação de estoque, construído em UMA passada sobre
-// compras + vendas. Antes, estoqueAtual varria S.compras e S.evento_vendas a cada
-// chamada → O(produtos × movimentos), e algumas telas chamavam 3-5×/produto.
-// Agora a agregação é feita uma vez e cada estoqueAtual vira O(1). O cache é
-// invalidado em bindData (_estoqueIdx=null) quando produtos/fichas/compras/
-// evento_vendas mudam. Semântica idêntica: tudo em ml, depois /cap.
+// ── CALCS (wrappers finos sobre domain.js — a lógica pura e testável vive lá) ──
+// O índice de estoque é memoizado aqui (camada de app) e invalidado em bindData
+// (_estoqueIdx=null) quando produtos/fichas/compras/evento_vendas mudam.
 let _estoqueIdx=null;
-function estoqueIndex(){
-  if(_estoqueIdx) return _estoqueIdx;
-  const cap={};      S.produtos.forEach(p=>{cap[p.id]=p.capacidade_ml||1;});
-  const fichaMap={}; S.fichas.forEach(f=>{fichaMap[f.id]=f;});
-  const idx={};
-  const get=pid=>(idx[pid]||(idx[pid]={entradasMl:0,consumoMl:0}));
-  S.compras.forEach(c=>{ if(c.produto_id) get(c.produto_id).entradasMl+=(c.qtd||0)*(cap[c.produto_id]||1); });
-  S.evento_vendas.forEach(v=>{
-    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-    if(v.tipo==="produto"&&v.item_id){ get(v.item_id).consumoMl+=qtd*(cap[v.item_id]||1); }
-    else if(v.tipo==="ficha"){
-      const f=fichaMap[v.item_id];
-      if(f&&f.ingredientes) f.ingredientes.forEach(ing=>{
-        if(ing.produto_id) get(ing.produto_id).consumoMl+=qtd*(ing.quantidade_ml||0);
-      });
-    }
-  });
-  _estoqueIdx=idx;
-  return idx;
-}
+function estoqueIndex(){ return _estoqueIdx || (_estoqueIdx = Domain.estoqueIndex(S.produtos,S.fichas,S.compras,S.evento_vendas)); }
+function estoqueAtual(pid){ return Domain.estoqueAtualFrom(S.produtos.find(x=>x.id===pid), estoqueIndex()); }
 
-function estoqueAtual(pid) {
-  const p = S.produtos.find(x=>x.id===pid); if(!p) return 0;
-  const cap = p.capacidade_ml||1;
-  const agg = estoqueIndex()[pid] || {entradasMl:0,consumoMl:0};
-  const ml = (p.estoque_inicial||0)*cap + agg.entradasMl - agg.consumoMl;
-  return ml/cap;
-}
-
-function cmvEvento(eid) {
-  const vendas=S.evento_vendas.filter(v=>v.evento_id===eid);
-  let cmv=0, rec_bar=0;
-  vendas.forEach(v=>{
-    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-    const qv=v.qtd_vendida||0;
-    if(v.tipo==="produto"){
-      const p=S.produtos.find(x=>x.id===v.item_id);
-      if(p){ cmv+=qtd*(p.preco_compra||0); rec_bar+=qv*(p.preco_venda||0); }
-    }
-    if(v.tipo==="ficha"){
-      const f=S.fichas.find(x=>x.id===v.item_id);
-      if(f){
-        rec_bar+=qv*(f.preco_venda||0);
-        if(f.ingredientes) f.ingredientes.forEach(ing=>{
-          const p=S.produtos.find(x=>x.id===ing.produto_id);
-          if(p&&p.preco_compra&&p.capacidade_ml)
-            cmv+=qtd*(ing.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
-        });
-      }
-    }
-    if(v.tipo==="manual"){
-      // Item importado do ZigPay sem correspondência (não mapeado).
-      // Opção A: receita = valor real do POS; CMV fica 0 (desconhecido) até mapear.
-      rec_bar += (v.valor_total||0);
-    }
-  });
-  return {cmv, rec_bar};
-}
-
-// Nº de vendas importadas ainda não mapeadas a um produto/ficha (CMV pendente).
-function qtdNaoMapeadas(eid){
-  return S.evento_vendas.filter(v=>v.evento_id===eid && v.tipo==="manual").length;
-}
-
-function calcEv(e) {
-  const entrada=e.entrada||0;
-  const {cmv,rec_bar}=cmvEvento(e.id);
-  const rec=rec_bar+entrada;
-  const dir=(e.dj||0)+(e.seguranca||0)+(e.staff||0)+(e.outros||0);
-  const rat=rateio();
-  const res=rec-cmv-dir-rat;
-  return {rec,cmv,cmvP:rec?cmv/rec:0,dir,res,mg:rec?res/rec:0,rec_bar};
-}
+function cmvEvento(eid){ return Domain.cmvEvento(eid, S.evento_vendas, S.produtos, S.fichas); }
+function qtdNaoMapeadas(eid){ return Domain.qtdNaoMapeadas(eid, S.evento_vendas); }
+function calcEv(e){ return Domain.calcEv(e, S.evento_vendas, S.produtos, S.fichas, rateio()); }
 
 function alertasEstoque() {
   return S.produtos.filter(p=>{
     const min = p.estoque_min||0;
     if(min===0) return false; // só alerta se mínimo foi definido
-    const atual = estoqueAtual(p.id);
-    return atual < min;
+    return estoqueAtual(p.id) < min;
   });
 }
 
-const totalFixo=()=>S.custos.filter(c=>!S.mesSel||(c.mes&&c.mes===S.mesSel)).reduce((s,c)=>s+(c.valor||0),0);
-const rateio=()=>S.config.datasNoMes>0?(totalFixo()/S.config.datasNoMes):0;
+const totalFixo=()=>Domain.totalFixo(S.custos, S.mesSel);
+const rateio=()=>Domain.rateio(S.custos, S.config, S.mesSel);
 const totalComprasMes=()=>S.compras.filter(c=>noMes(c.data)).reduce((s,c)=>s+(c.total||0),0);
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -925,16 +850,7 @@ function renderFichas(){
   `);
 }
 
-function calcCustoFicha(f){
-  if(!f.ingredientes||!f.ingredientes.length) return 0;
-  let c=0;
-  f.ingredientes.forEach(i=>{
-    const p=S.produtos.find(x=>x.id===i.produto_id);
-    if(p&&p.preco_compra&&p.capacidade_ml)
-      c+=(i.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
-  });
-  return c;
-}
+function calcCustoFicha(f){ return Domain.calcCustoFicha(f, S.produtos); }
 
 function renderFichaForm(){
   const ings=fichaForm.ingredientes||[];

@@ -202,6 +202,7 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
   <div id="p-cmv"     class="page"></div>
   <div id="p-inv"     class="page"></div>
   <div id="p-fecha"   class="page"></div>
+  <div id="p-lixeira" class="page"></div>
 </div>
 </div>
 <div id="bnav" style="overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -225,6 +226,8 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>INV.</button>
   <button class="bn" id="bn-fecha"  onclick="go('fecha')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>FECHA.</button>
+  <button class="bn" id="bn-lixeira" onclick="go('lixeira')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>LIXEIRA</button>
   <button class="bn" id="bn-sair"  onclick="doLogout()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>SAIR</button>
 </div>
@@ -269,7 +272,22 @@ const FS = {
       return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
+  // Soft-delete: marca deletedAt (vai para a Lixeira). Use hardDel para apagar de vez.
   del: async (col,id) => {
+    if(!db){ toast("Banco indisponível — exclusão não realizada.","err"); return false; }
+    try {
+      const ts = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection(col).doc(String(id)).set({deletedAt:ts, updatedAt:ts},{merge:true}); return true;
+    } catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); return false; }
+  },
+  restore: async (col,id) => {
+    if(!db){ toast("Banco indisponível.","err"); return false; }
+    try {
+      const ts = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection(col).doc(String(id)).update({deletedAt:firebase.firestore.FieldValue.delete(), updatedAt:ts}); return true;
+    } catch(e){ toast(FS._msg(e),"err","Falha ao restaurar"); return false; }
+  },
+  hardDel: async (col,id) => {
     if(!db){ toast("Banco indisponível — exclusão não realizada.","err"); return false; }
     try { await db.collection(col).doc(String(id)).delete(); return true; }
     catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); return false; }
@@ -359,6 +377,7 @@ const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
   evento_vendas:[],custos:[],inventarios:[],config:{datasNoMes:4},
+  _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null  // null = todos os meses
 };
 
@@ -472,6 +491,7 @@ const PAGES=[
   {id:"cmv",     label:"CMV"},
   {id:"inv",     label:"Inventário"},
   {id:"fecha",   label:"Fechamento"},
+  {id:"lixeira", label:"🗑 Lixeira"},
 ];
 
 function initNav(){
@@ -516,6 +536,7 @@ function render(){
   if(p==="cmv")     renderCMV();
   if(p==="inv")     renderInventario();
   if(p==="fecha")   renderFechamento();
+  if(p==="lixeira") renderLixeira();
 }
 
 // Coalesce múltiplos disparos (ex.: 8 snapshots no load) em um único render por frame.
@@ -673,7 +694,7 @@ function renderProd(){
             <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${atual.toFixed(1)}</td>
             <td style="white-space:nowrap">
               <button class="bi" onclick="prodForm={...S.produtos.find(x=>x.id==='${p.id}')};renderProd()">✏</button>
-              <button class="bi" onclick="confirmarLimpar(()=>FS.del('produtos','${p.id}'))">✕</button>
+              <button class="bi" onclick="softDel('produtos','${p.id}')">✕</button>
             </td>
           </tr>`;
         }).join(""):"<tr><td colspan='9' class='empty'>Nenhum produto cadastrado.</td></tr>"}
@@ -841,7 +862,7 @@ function renderFichas(){
             }).join(" + ")||"—"}</td>
             <td style="white-space:nowrap">
               <button class="bi" onclick="fichaForm={...JSON.parse(JSON.stringify(S.fichas.find(x=>x.id==='${f.id}')))};renderFichas()">✏</button>
-              <button class="bi" onclick="confirmarLimpar(()=>FS.del('fichas','${f.id}'))">✕</button>
+              <button class="bi" onclick="softDel('fichas','${f.id}')">✕</button>
             </td>
           </tr>`;
         }).join(""):"<tr><td colspan='7' class='empty'>Nenhuma ficha cadastrada.</td></tr>"}
@@ -1087,7 +1108,7 @@ function renderCompras(){
               <td class="r mn mt">${c.custo_unit?Rf(c.custo_unit):"—"}</td>
               <td class="r mn w6">${R(c.total)}</td>
               <td class="mt">${c.forn||""}</td>
-              <td><button class="bi" onclick="confirmarLimpar(()=>FS.del('compras','${c.id}'))">✕</button></td>
+              <td><button class="bi" onclick="softDel('compras','${c.id}')">✕</button></td>
             </tr>`;
           }).join("")}</tbody>
         </table></div>
@@ -1175,7 +1196,7 @@ function renderEventos(){
         <div style="margin-left:auto;display:flex;gap:5px">
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evVendaEv=evSel===e.id?e.id:e.id;evSel=e.id;renderEventos()">📋 Vendas</button>
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evForm={...S.eventos.find(x=>x.id==='${e.id}')};renderEventos()">✏</button>
-          <button class="btn bd_ bsm" onclick="event.stopPropagation();confirmarLimpar(()=>{FS.del('eventos','${e.id}');if(evSel==='${e.id}')evSel=null;})">✕</button>
+          <button class="btn bd_ bsm" onclick="event.stopPropagation();softDelEvento('${e.id}')">✕</button>
         </div>
       </div>
     </div>`).join(""):`<div class="box"><div class="empty">Nenhum evento. Clique em "+ Novo Evento".</div></div>`;
@@ -1289,7 +1310,7 @@ function renderVendasEvento(e){
                 <option value="">mapear…</option>
                 ${allItems.map(i=>`<option value="${i.tipo}::${i.id}">${i.nome}</option>`).join("")}
               </select>
-              <button class="bi" onclick="confirmarLimpar(()=>FS.del('evento_vendas','${v.id}'))">✕</button>
+              <button class="bi" onclick="softDel('evento_vendas','${v.id}')">✕</button>
             </td>
           </tr>`;
         }
@@ -1311,7 +1332,7 @@ function renderVendasEvento(e){
           <td class="r mn" style="color:${(v.qtd_cortesia||0)>0?"#f59e0b":"#484f58"}">${v.qtd_cortesia||0}</td>
           <td class="r mn">${Rf(cmvI)}</td>
           <td class="r mn">${Rf(recI)}</td>
-          <td><button class="bi" onclick="confirmarLimpar(()=>FS.del('evento_vendas','${v.id}'))">✕</button></td>
+          <td><button class="bi" onclick="softDel('evento_vendas','${v.id}')">✕</button></td>
         </tr>`;
       }).join(""):`<tr><td colspan="7" class="empty">Nenhuma venda registrada. Clique em "+ Adicionar Item".</td></tr>`}
       </tbody>
@@ -1433,7 +1454,7 @@ function renderCustos(){
               <span style="font-family:monospace;font-size:10px;color:#484f58">${P(tf?c.valor/tf:0)}</span>
             </div>
           </td>
-          <td><button class="bi" onclick="confirmarLimpar(()=>FS.del('custos','${c.id}'))">✕</button></td>
+          <td><button class="bi" onclick="softDel('custos','${c.id}')">✕</button></td>
         </tr>`).join(""):`<tr><td colspan="5" class="empty">Nenhum custo fixo cadastrado.</td></tr>`}
         ${S.custos.length?`<tr class="tr-tot">
           <td>Total</td>
@@ -2248,19 +2269,131 @@ async function seedCombos(){
   console.log("Combos cadastrados:", count);
 }
 
+// ── SOFT-DELETE / LIXEIRA ─────────────────────────────────────────────────────
+// ✕ nas telas faz soft-delete (vai para a Lixeira). Exclusão permanente só aqui.
+function softDel(col,id){ if(confirm("Mover para a lixeira?")) FS.del(col,id); }
+function restaurarDoc(col,id){ FS.restore(col,id); }
+
+// ── CASCATA EVENTO → VENDAS (batch atômico) ───────────────────────────────────
+// Limite conhecido: batch do Firestore = 500 ops. Eventos com >~400 vendas
+// precisariam de chunking (pendência futura registrada).
+async function softDelEvento(eid){
+  if(!confirm("Mover evento e suas vendas para a lixeira?")) return;
+  if(evSel===eid) evSel=null;
+  if(!db) return;
+  try{
+    const ts=firebase.firestore.FieldValue.serverTimestamp();
+    const batch=db.batch();
+    batch.set(db.collection("eventos").doc(String(eid)),{deletedAt:ts,updatedAt:ts},{merge:true});
+    S.evento_vendas.filter(v=>v.evento_id===eid).forEach(v=>{
+      batch.set(db.collection("evento_vendas").doc(String(v.id)),{deletedAt:ts,updatedAt:ts,deletedCascade:eid},{merge:true});
+    });
+    await batch.commit();
+  }catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); }
+}
+async function restaurarEvento(eid){
+  if(!db) return;
+  try{
+    const ts=firebase.firestore.FieldValue.serverTimestamp(), del=firebase.firestore.FieldValue.delete();
+    const batch=db.batch();
+    batch.update(db.collection("eventos").doc(String(eid)),{deletedAt:del,updatedAt:ts});
+    (S._trash.evento_vendas||[]).filter(v=>v.deletedCascade===eid).forEach(v=>{
+      batch.update(db.collection("evento_vendas").doc(String(v.id)),{deletedAt:del,deletedCascade:del,updatedAt:ts});
+    });
+    await batch.commit();
+  }catch(e){ toast(FS._msg(e),"err","Falha ao restaurar"); }
+}
+async function hardDelEvento(eid){
+  if(!db) return;
+  try{
+    const batch=db.batch();
+    batch.delete(db.collection("eventos").doc(String(eid)));
+    [...(S.evento_vendas||[]),...(S._trash.evento_vendas||[])]
+      .filter(v=>v.evento_id===eid)
+      .forEach(v=>batch.delete(db.collection("evento_vendas").doc(String(v.id))));
+    await batch.commit();
+  }catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); }
+}
+
+const LIXEIRA_COLS=[
+  {col:"produtos",      label:"Produtos"},
+  {col:"fichas",        label:"Fichas"},
+  {col:"compras",       label:"Compras"},
+  {col:"eventos",       label:"Eventos"},
+  {col:"evento_vendas", label:"Vendas"},
+  {col:"custos",        label:"Custos fixos"},
+  {col:"inventarios",   label:"Inventários"},
+];
+function descreveDoc(col,d){
+  switch(col){
+    case "produtos": case "fichas": case "custos": return d.nome||"(sem nome)";
+    case "compras":  return `${(S.produtos.find(p=>p.id===d.produto_id)||{}).nome||d.produto_id||"?"} · ${d.data||""}`;
+    case "eventos":  return `${d.nome||"(sem nome)"} · ${d.data||""}`;
+    case "evento_vendas":{
+      const it=d.tipo==="ficha"?S.fichas.find(x=>x.id===d.item_id):S.produtos.find(x=>x.id===d.item_id);
+      return (it&&it.nome)||d.nome_zigpay||`(${d.tipo||"venda"})`;
+    }
+    case "inventarios": return `${d.semana||""} · ${fmtMes(d.mes||"")||d.data||""}`;
+    default: return d.id||"";
+  }
+}
+function renderLixeira(){
+  const grupos=LIXEIRA_COLS.map(g=>{
+    let itens=S._trash[g.col]||[];
+    // Vendas cascateadas seguem o evento-pai → não aparecem soltas na lixeira.
+    if(g.col==="evento_vendas") itens=itens.filter(v=>!v.deletedCascade);
+    return {...g, itens};
+  }).filter(g=>g.itens.length);
+  const total=grupos.reduce((s,g)=>s+g.itens.length,0);
+  const linha=(col,d)=>{
+    let desc=descreveDoc(col,d), restore, hard;
+    if(col==="eventos"){
+      const nv=(S._trash.evento_vendas||[]).filter(v=>v.deletedCascade===d.id).length;
+      if(nv) desc+=` <span class="mt" style="font-weight:400">(+${nv} venda${nv>1?"s":""})</span>`;
+      restore=`restaurarEvento('${d.id}')`; hard=`confirmarLimpar(()=>hardDelEvento('${d.id}'))`;
+    } else {
+      restore=`restaurarDoc('${col}','${d.id}')`; hard=`confirmarLimpar(()=>FS.hardDel('${col}','${d.id}'))`;
+    }
+    return `<tr>
+      <td class="w6">${desc}</td>
+      <td class="r" style="white-space:nowrap">
+        <button class="btn bg_ bsm" onclick="${restore}">↩ Restaurar</button>
+        <button class="btn bd_ bsm" onclick="${hard}">Excluir definitivamente</button>
+      </td>
+    </tr>`;
+  };
+  set("p-lixeira",`
+    <div class="eyebrow">RECUPERAÇÃO</div>
+    <div class="pg-t">Lixeira</div>
+    ${total?grupos.map(g=>`
+      <div class="box">
+        <div class="bh"><span class="bt">${g.label} · ${g.itens.length}</span></div>
+        <div class="tw"><table>
+          <thead><tr><th>Item</th><th class="r">Ações</th></tr></thead>
+          <tbody>${g.itens.map(d=>linha(g.col,d)).join("")}</tbody>
+        </table></div>
+      </div>`).join(""):`<div class="box"><div class="empty">Lixeira vazia.</div></div>`}
+  `);
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let _unsubs = [];
 
 // Anexa os listeners do Firestore. Idempotente: não duplica se já vinculado.
 function bindData(){
   if(_unsubs.length || !db) return;
-  _unsubs.push(FS.listen("produtos",      d=>{S.produtos=d;_estoqueIdx=null;scheduleRender();}));
-  _unsubs.push(FS.listen("fichas",        d=>{S.fichas=d;_estoqueIdx=null;scheduleRender();}));
-  _unsubs.push(FS.listen("compras",       d=>{S.compras=d;_estoqueIdx=null;scheduleRender();}));
-  _unsubs.push(FS.listen("eventos",       d=>{S.eventos=d;scheduleRender();}));
-  _unsubs.push(FS.listen("evento_vendas", d=>{S.evento_vendas=d;_estoqueIdx=null;scheduleRender();}));
-  _unsubs.push(FS.listen("custos",        d=>{S.custos=d;scheduleRender();}));
-  _unsubs.push(FS.listen("inventarios",   d=>{S.inventarios=d;scheduleRender();}));
+  // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
+  // índice de estoque para as coleções que o alimentam.
+  const COLS=["produtos","fichas","compras","eventos","evento_vendas","custos","inventarios"];
+  const STOCK=new Set(["produtos","fichas","compras","evento_vendas"]);
+  COLS.forEach(col=>{
+    _unsubs.push(FS.listen(col, d=>{
+      S[col]=d.filter(x=>!x.deletedAt);
+      S._trash[col]=d.filter(x=>x.deletedAt);
+      if(STOCK.has(col)) _estoqueIdx=null;
+      scheduleRender();
+    }));
+  });
   _unsubs.push(db.collection("config").doc("settings").onSnapshot(
     s=>{ if(s.exists)S.config=s.data();scheduleRender(); },
     e=>toast(FS._msg(e),"err","Falha ao carregar config")));
@@ -2272,7 +2405,7 @@ function unbindData(){
   _unsubs.forEach(u=>{ try{ u&&u(); }catch(_){} });
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
-  S.evento_vendas=[];S.custos=[];S.inventarios=[];
+  S.evento_vendas=[];S.custos=[];S.inventarios=[];S._trash={};
 }
 
 function showLogin(){

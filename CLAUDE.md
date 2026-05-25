@@ -51,6 +51,6 @@ The app imports the venue's POS (ZigPay) Excel export to auto-create an event an
 
 ## Conventions
 
-- **Destructive deletes require typed confirmation:** `confirmarLimpar(cb)` (:231) shows a modal demanding the user type `LIMPAR` before running `cb`. Wrap any permanent-deletion action in it, matching existing `onclick="confirmarLimpar(()=>FS.del(...))"` usage.
+- **Deletes are soft by default:** the ✕ buttons call `softDel(col,id)` (simple confirm → `FS.del`, which sets `deletedAt`). Listeners in `bindData` filter `deletedAt` out of `S[col]` and into `S._trash[col]`, so all calc/render automatically excludes soft-deleted docs. The **Lixeira** page (`renderLixeira`) restores (`FS.restore`, clears `deletedAt`) or permanently deletes. **Permanent deletion** (`FS.hardDel`) is the only thing still gated by the typed-`LIMPAR` modal `confirmarLimpar(cb)` (used in the Lixeira).
 - **Currency/percent formatting** helpers: `R` (BRL, no decimals), `Rf` (BRL with decimals), `P` (percent). Read with `nv(id)` (number) / `sv(id)` (string) and write with `set(id, html)`.
 - **Seeding:** `seedIfEmpty()` / the Produtos-page button batch-creates the `ZIGPAY_PRODUTOS` catalog; `seedCombos()` generates combo recipe `fichas`. These are manual, button-triggered actions.

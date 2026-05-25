@@ -145,6 +145,14 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
 .dlg-inp:focus{border-color:#ef4444}
 .dlg-inp.ok{border-color:#22c55e;color:#22c55e}
 .dlg-btns{display:flex;gap:8px;justify-content:flex-end}
+/* toasts */
+#toast-wrap{position:fixed;bottom:16px;right:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:min(360px,92vw);pointer-events:none}
+.toast{background:#161b22;border:1px solid #2d333b;border-left:3px solid #2563eb;border-radius:8px;padding:11px 14px;font-size:12px;color:#e6edf3;line-height:1.5;box-shadow:0 10px 30px rgba(0,0,0,.5);animation:toast-in .2s ease}
+.toast.err{border-left-color:#ef4444}.toast.ok{border-left-color:#22c55e}
+.toast-t{font-weight:700;margin-bottom:2px;color:#8b949e}
+.toast.err .toast-t{color:#ef4444}.toast.ok .toast-t{color:#22c55e}
+@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(max-width:680px){#toast-wrap{bottom:72px;right:8px;left:8px;max-width:none}}
 </style>
 </head>
 <body>
@@ -217,15 +225,50 @@ try {
 } catch(e){ console.warn("Firebase:",e.message); }
 
 const FS = {
+  // Retornam true/false. Em caso de erro, mostram toast — nunca falham em silêncio.
   save: async (col,data) => {
-    if(!db) return;
-    if(data.id) await db.collection(col).doc(String(data.id)).set(data);
-    else { const r=await db.collection(col).add(data); await r.update({id:r.id}); }
+    if(!db){ toast("Banco indisponível — alteração não salva.","err"); return false; }
+    try {
+      if(data.id) await db.collection(col).doc(String(data.id)).set(data);
+      else { const r=await db.collection(col).add(data); await r.update({id:r.id}); }
+      return true;
+    } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
-  del:    (col,id)    => db&&db.collection(col).doc(String(id)).delete(),
-  setDoc: (col,id,d)  => db&&db.collection(col).doc(id).set(d,{merge:true}),
-  listen: (col,cb)    => db?db.collection(col).onSnapshot(s=>cb(s.docs.map(d=>d.data()))):null,
+  del: async (col,id) => {
+    if(!db){ toast("Banco indisponível — exclusão não realizada.","err"); return false; }
+    try { await db.collection(col).doc(String(id)).delete(); return true; }
+    catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); return false; }
+  },
+  setDoc: async (col,id,d) => {
+    if(!db){ toast("Banco indisponível — alteração não salva.","err"); return false; }
+    try { await db.collection(col).doc(id).set(d,{merge:true}); return true; }
+    catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
+  },
+  listen: (col,cb) => db
+    ? db.collection(col).onSnapshot(
+        s=>cb(s.docs.map(d=>d.data())),
+        e=>toast(FS._msg(e),"err","Falha ao carregar "+col))
+    : null,
+  _msg: (e) => {
+    const c=e&&e.code;
+    if(c==="permission-denied") return "Permissão negada pelo banco. Verifique se você está logado.";
+    if(c==="unavailable")       return "Sem conexão com o servidor. Verifique a internet e tente de novo.";
+    return (e&&e.message) || "Erro desconhecido ao acessar o banco.";
+  },
 };
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+// Notificação não-bloqueante. tipo: "err" | "ok" | "info" (default)
+function toast(msg, tipo="info", titulo){
+  let wrap=el("toast-wrap");
+  if(!wrap){ wrap=document.createElement("div"); wrap.id="toast-wrap"; document.body.appendChild(wrap); }
+  const t=document.createElement("div");
+  t.className="toast"+(tipo==="err"?" err":tipo==="ok"?" ok":"");
+  const ttl=titulo||(tipo==="err"?"Erro":tipo==="ok"?"Pronto":"Aviso");
+  t.innerHTML=`<div class="toast-t">${ttl}</div><div>${msg}</div>`;
+  wrap.appendChild(t);
+  setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; setTimeout(()=>t.remove(),300); }, tipo==="err"?6000:3000);
+}
 
 // ── CONFIRMAÇÃO DESTRUTIVA ────────────────────────────────────────────────────
 function confirmarLimpar(cb) {
@@ -731,16 +774,20 @@ async function saveBulkAll(){
   if(ids.length===0){alert("Nenhuma alteração pendente.");return;}
   const btn=event.target;
   btn.textContent="Salvando...";btn.disabled=true;
-  let saved=0;
+  let saved=0, falhas=0;
   for(const pid of ids){
     const p=S.produtos.find(x=>x.id===pid);
     if(!p) continue;
     const updated={...p,...bulkChanges[pid]};
-    await FS.save("produtos",updated);
-    delete bulkChanges[pid];
-    saved++;
+    const ok=await FS.save("produtos",updated);
+    if(ok){ delete bulkChanges[pid]; saved++; } else { falhas++; }
   }
-  btn.textContent="✓ Salvo!"; setTimeout(()=>{bulkMode=false;renderProd();},600);
+  if(falhas){
+    btn.textContent="⚠ "+falhas+" falha(s)"; btn.disabled=false;
+    toast(saved+" salvo(s), "+falhas+" falharam. As alterações não salvas foram mantidas para nova tentativa.","err");
+  } else {
+    btn.textContent="✓ Salvo!"; setTimeout(()=>{bulkMode=false;renderProd();},600);
+  }
 }
 
 // ── FICHAS TÉCNICAS ───────────────────────────────────────────────────────────
@@ -1569,7 +1616,8 @@ async function salvarInventario(){
   const contagens={};
   Object.entries(invContagens).forEach(([k,v])=>{if(v!==undefined)contagens[k]=parseFloat(v)||0;});
   if(!Object.keys(contagens).length){alert("Preencha ao menos uma contagem física.");return;}
-  await FS.save("inventarios",{id:null,semana:invSem,data,contagens});
+  const ok=await FS.save("inventarios",{id:null,semana:invSem,data,contagens});
+  if(!ok) return;
   invContagens={};
   alert("Inventário salvo! "+Object.keys(contagens).length+" produtos contados.");
 }

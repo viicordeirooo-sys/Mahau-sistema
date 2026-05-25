@@ -6,6 +6,7 @@
 <title>Mahau · Sistema Financeiro</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -153,6 +154,21 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
 .toast.err .toast-t{color:#ef4444}.toast.ok .toast-t{color:#22c55e}
 @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media(max-width:680px){#toast-wrap{bottom:72px;right:8px;left:8px;max-width:none}}
+/* utilitário */
+.hidden{display:none!important}
+/* login */
+.login-screen{position:fixed;inset:0;z-index:9998;background:#0d1117;display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:30px 26px;width:340px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.login-logo{font-size:24px;font-weight:800;letter-spacing:-.5px;text-align:center}
+.login-tag{font-size:9px;color:#484f58;font-weight:600;letter-spacing:1.5px;text-align:center;margin-bottom:22px}
+.login-box .fi{margin-bottom:12px}
+.login-box .fi input{background:#0d1117}
+.login-err{color:#ef4444;font-size:11px;margin-top:10px;min-height:14px;text-align:center}
+/* auth na sidebar */
+.sb-auth{padding:10px 14px;border-top:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sb-auth-email{font-size:10px;color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-logout{background:transparent;border:1px solid #2d333b;color:#8b949e;border-radius:5px;padding:5px 9px;font-size:10px;font-weight:600;cursor:pointer;flex-shrink:0}
+.sb-logout:hover{border-color:#ef4444;color:#ef4444}
 </style>
 </head>
 <body>
@@ -171,6 +187,7 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
     <div class="ss-r"><span class="ss-l">Resultado</span><span class="ss-v" id="ss-res">—</span></div>
     <div class="ss-r"><span class="ss-l">Alertas Estoque</span><span class="ss-v tag-red" id="ss-alr">—</span></div>
   </div>
+  <div class="sb-auth" id="sb-auth"></div>
 </div>
 <div id="main">
   <div id="month-bar"></div>
@@ -207,11 +224,24 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>INV.</button>
   <button class="bn" id="bn-fecha"  onclick="go('fecha')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>FECHA.</button>
+  <button class="bn" id="bn-sair"  onclick="doLogout()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>SAIR</button>
+</div>
+
+<div id="login-screen" class="login-screen">
+  <form class="login-box" onsubmit="doLogin(event)">
+    <div class="login-logo">Mahau</div>
+    <div class="login-tag">SISTEMA FINANCEIRO</div>
+    <div class="fi"><label>E-mail</label><input id="login-email" type="email" autocomplete="username" spellcheck="false"></div>
+    <div class="fi"><label>Senha</label><input id="login-pass" type="password" autocomplete="current-password"></div>
+    <button class="btn bp" type="submit" id="login-btn" style="width:100%;justify-content:center;margin-top:6px">Entrar</button>
+    <div class="login-err" id="login-err"></div>
+  </form>
 </div>
 
 <script>
 // ── FIREBASE ──────────────────────────────────────────────────────────────────
-let db = null;
+let db = null, auth = null;
 try {
   firebase.initializeApp({
     apiKey:"AIzaSyA_lHzWt7pKHbebbRmhSakMwZwfVa7fUKI",
@@ -222,6 +252,7 @@ try {
     appId:"1:748350373228:web:cbbd080ce643f8308a0749"
   });
   db = firebase.firestore();
+  auth = firebase.auth();
 } catch(e){ console.warn("Firebase:",e.message); }
 
 const FS = {
@@ -2179,21 +2210,94 @@ async function seedCombos(){
   console.log("Combos cadastrados:", count);
 }
 
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+let _unsubs = [];
+
+// Anexa os listeners do Firestore. Idempotente: não duplica se já vinculado.
+function bindData(){
+  if(_unsubs.length || !db) return;
+  _unsubs.push(FS.listen("produtos",      d=>{S.produtos=d;render();}));
+  _unsubs.push(FS.listen("fichas",        d=>{S.fichas=d;render();}));
+  _unsubs.push(FS.listen("compras",       d=>{S.compras=d;render();}));
+  _unsubs.push(FS.listen("eventos",       d=>{S.eventos=d;render();}));
+  _unsubs.push(FS.listen("evento_vendas", d=>{S.evento_vendas=d;render();}));
+  _unsubs.push(FS.listen("custos",        d=>{S.custos=d;render();}));
+  _unsubs.push(FS.listen("inventarios",   d=>{S.inventarios=d;render();}));
+  _unsubs.push(db.collection("config").doc("settings").onSnapshot(
+    s=>{ if(s.exists)S.config=s.data();render(); },
+    e=>toast(FS._msg(e),"err","Falha ao carregar config")));
+  // Produtos são cadastrados manualmente via botão na página Produtos
+}
+
+// Cancela os listeners e limpa o estado — evita erros de permissão após logout.
+function unbindData(){
+  _unsubs.forEach(u=>{ try{ u&&u(); }catch(_){} });
+  _unsubs=[];
+  S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
+  S.evento_vendas=[];S.custos=[];S.inventarios=[];
+}
+
+function showLogin(){
+  el("login-screen")?.classList.remove("hidden");
+  const b=el("login-btn"); if(b){ b.disabled=false; b.textContent="Entrar"; }
+  setTimeout(()=>el("login-email")?.focus(),50);
+}
+
+function showApp(user){
+  el("login-screen")?.classList.add("hidden");
+  const box=el("sb-auth");
+  if(box) box.innerHTML=`<span class="sb-auth-email" title="${user.email||""}">${user.email||"Logado"}</span>
+    <button class="sb-logout" onclick="doLogout()">Sair</button>`;
+  render();
+}
+
+function doLogin(e){
+  if(e) e.preventDefault();
+  if(!auth){ toast("Autenticação indisponível.","err"); return; }
+  const email=el("login-email").value.trim();
+  const pass =el("login-pass").value;
+  const errEl=el("login-err"); errEl.textContent="";
+  if(!email||!pass){ errEl.textContent="Preencha e-mail e senha."; return; }
+  const btn=el("login-btn"); btn.disabled=true; btn.textContent="Entrando...";
+  // onAuthStateChanged cuida de mostrar o app em caso de sucesso.
+  auth.signInWithEmailAndPassword(email,pass).catch(err=>{
+    errEl.textContent=loginErrMsg(err);
+    btn.disabled=false; btn.textContent="Entrar";
+  });
+}
+
+function doLogout(){
+  if(!auth) return;
+  if(confirm("Sair do sistema?")) auth.signOut().then(()=>{ const p=el("login-pass"); if(p)p.value=""; });
+}
+
+function loginErrMsg(err){
+  switch(err&&err.code){
+    case "auth/invalid-email":          return "E-mail inválido.";
+    case "auth/user-disabled":          return "Usuário desativado.";
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+    case "auth/invalid-credential":     return "E-mail ou senha incorretos.";
+    case "auth/too-many-requests":      return "Muitas tentativas. Aguarde e tente de novo.";
+    case "auth/network-request-failed": return "Falha de conexão.";
+    case "auth/unauthorized-domain":    return "Domínio não autorizado (Authentication → Settings → Authorized domains).";
+    case "auth/operation-not-allowed":  return "Login por e-mail/senha não habilitado no Firebase.";
+    default: return (err&&err.message)||"Falha ao entrar.";
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function init(){
   initNav();render();
-  if(db){
-    FS.listen("produtos",  d=>{S.produtos=d;render();});
-    FS.listen("fichas",    d=>{S.fichas=d;render();});
-    FS.listen("compras",   d=>{S.compras=d;render();});
-    FS.listen("eventos",   d=>{S.eventos=d;render();});
-    FS.listen("evento_vendas",d=>{S.evento_vendas=d;render();});
-    FS.listen("custos",d=>{S.custos=d;render();});
-    FS.listen("inventarios",d=>{S.inventarios=d;render();});
-    db.collection("config").doc("settings").onSnapshot(s=>{
-      if(s.exists)S.config=s.data();render();
+  if(auth){
+    auth.onAuthStateChanged(user=>{
+      if(user){ bindData(); showApp(user); }
+      else    { unbindData(); showLogin(); }
     });
-    // Products are seeded manually via button in Produtos page
+  } else {
+    // Firebase/Auth indisponível — modo degradado, sem login (comportamento anterior)
+    el("login-screen")?.classList.add("hidden");
+    bindData();
   }
 }
 init();

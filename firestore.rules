@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Regras do Firestore — Mahau Sistema
+//
+// ⚠️ ESTE ARQUIVO É REFERÊNCIA / VERSIONAMENTO.
+// As regras são aplicadas pelo console do Firebase
+// (Firestore Database → Regras → colar → Publicar), NÃO por deploy automático.
+//
+// ROLLOUT (Item 1):
+//   • Passo 5 (e só ele): substituir a regra ABERTA atual pela regra TRAVADA abaixo.
+//   • Antes disso, o app de login (com regras ainda abertas) já deve estar no ar
+//     e validado, e a conta de usuário já criada no Authentication.
+//   • Reversão: o console mantém histórico — basta republicar a versão anterior.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── REGRA ATUAL (ABERTA) — banco público. NÃO deixar assim em produção. ──
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /{document=**} {
+//       allow read, write: if true;
+//     }
+//   }
+// }
+
+// ── REGRA ALVO (Fase 3.1): exige usuário autenticado. ──
+// Isolamento por empresa (orgId) virá na Fase 3.3 (multi-tenant).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

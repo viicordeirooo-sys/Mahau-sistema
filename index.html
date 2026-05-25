@@ -260,8 +260,10 @@ const FS = {
   save: async (col,data) => {
     if(!db){ toast("Banco indisponível — alteração não salva.","err"); return false; }
     try {
-      if(data.id) await db.collection(col).doc(String(data.id)).set(data);
-      else { const r=await db.collection(col).add(data); await r.update({id:r.id}); }
+      const ts = firebase.firestore.FieldValue.serverTimestamp();
+      // Update usa merge:true para não apagar createdAt (e campos futuros) no overwrite.
+      if(data.id) await db.collection(col).doc(String(data.id)).set({...data, updatedAt:ts}, {merge:true});
+      else { const r=await db.collection(col).add({...data, createdAt:ts, updatedAt:ts}); await r.update({id:r.id}); }
       return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
@@ -272,8 +274,10 @@ const FS = {
   },
   setDoc: async (col,id,d) => {
     if(!db){ toast("Banco indisponível — alteração não salva.","err"); return false; }
-    try { await db.collection(col).doc(id).set(d,{merge:true}); return true; }
-    catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
+    try {
+      const ts = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection(col).doc(id).set({...d, updatedAt:ts},{merge:true}); return true;
+    } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
   listen: (col,cb) => db
     ? db.collection(col).onSnapshot(

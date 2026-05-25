@@ -469,8 +469,18 @@ function cmvEvento(eid) {
         });
       }
     }
+    if(v.tipo==="manual"){
+      // Item importado do ZigPay sem correspondência (não mapeado).
+      // Opção A: receita = valor real do POS; CMV fica 0 (desconhecido) até mapear.
+      rec_bar += (v.valor_total||0);
+    }
   });
   return {cmv, rec_bar};
+}
+
+// Nº de vendas importadas ainda não mapeadas a um produto/ficha (CMV pendente).
+function qtdNaoMapeadas(eid){
+  return S.evento_vendas.filter(v=>v.evento_id===eid && v.tipo==="manual").length;
 }
 
 function calcEv(e) {
@@ -1192,6 +1202,7 @@ function renderEventos(){
       <div class="ech">
         ${chip("CMV "+P(e.cmvP),e.cmvP>0.30?"#ef4444":e.cmvP>0.28?"#f59e0b":"#22c55e")}
         ${chip("Margem "+P(Math.max(0,e.mg)),e.mg>0.20?"#22c55e":e.mg>0.10?"#f59e0b":"#ef4444")}
+        ${(qn=>qn?chip("⚠ "+qn+" não mapeado"+(qn>1?"s":""),"#f59e0b"):"")(qtdNaoMapeadas(e.id))}
         <div style="margin-left:auto;display:flex;gap:5px">
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evVendaEv=evSel===e.id?e.id:e.id;evSel=e.id;renderEventos()">📋 Vendas</button>
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evForm={...S.eventos.find(x=>x.id==='${e.id}')};renderEventos()">✏</button>
@@ -1290,9 +1301,29 @@ function renderVendasEvento(e){
       <button class="btn bp bsm" onclick="addVenda('${e.id}')">+ Adicionar Item</button>
     </div>
     <div id="venda-form-${e.id}"></div>
+    ${qtdNaoMapeadas(e.id)?`<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">
+      ⚠ ${qtdNaoMapeadas(e.id)} item(ns) importado(s) sem correspondência. A <strong>receita já está contabilizada</strong> pelo valor do ZigPay, mas o <strong>CMV só entra após mapear</strong> cada item a um produto/ficha (coluna da direita).
+    </div>`:""}
     <div class="tw"><table>
       <thead><tr><th>Item</th><th>Tipo</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">CMV</th><th class="r">Receita</th><th></th></tr></thead>
       <tbody>${vendas.length?vendas.map(v=>{
+        if(v.tipo==="manual"){
+          return `<tr style="background:rgba(245,158,11,.06)">
+            <td class="w6" title="${(v.cat_zigpay||"").replace(/"/g,"")}">${v.nome_zigpay||"(sem nome)"} ${chip("não mapeado","#f59e0b")}</td>
+            <td>${chip("importado","#f59e0b")}</td>
+            <td class="r mn">${v.qtd_vendida||0}</td>
+            <td class="r mn mt">${v.qtd_cortesia||0}</td>
+            <td class="r mn mt" title="Custo desconhecido até mapear a um produto/ficha">—</td>
+            <td class="r mn">${Rf(v.valor_total||0)}</td>
+            <td style="white-space:nowrap">
+              <select class="ing-sel" style="width:118px;display:inline-block;padding:4px 6px;font-size:11px;vertical-align:middle" onchange="mapearVenda('${v.id}',this.value)">
+                <option value="">mapear…</option>
+                ${allItems.map(i=>`<option value="${i.tipo}::${i.id}">${i.nome}</option>`).join("")}
+              </select>
+              <button class="bi" onclick="confirmarLimpar(()=>FS.del('evento_vendas','${v.id}'))">✕</button>
+            </td>
+          </tr>`;
+        }
         const item=v.tipo==="ficha"?S.fichas.find(x=>x.id===v.item_id):S.produtos.find(x=>x.id===v.item_id);
         if(!item) return"";
         const qtdT=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
@@ -1317,6 +1348,15 @@ function renderVendasEvento(e){
       </tbody>
     </table></div>
   </div>`;
+}
+
+// Mapeia uma venda importada (manual) a um produto/ficha: o CMV passa a ser
+// calculado e o estoque baixado. Mantém qtd/valores originais do ZigPay.
+function mapearVenda(vid, raw){
+  if(!raw) return;
+  const v=S.evento_vendas.find(x=>x.id===vid); if(!v) return;
+  const [tipo,item_id]=raw.split("::");
+  FS.save("evento_vendas",{...v, tipo, item_id});
 }
 
 function addVenda(eid){

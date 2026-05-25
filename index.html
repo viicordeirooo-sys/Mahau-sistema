@@ -305,6 +305,12 @@ function toast(msg, tipo="info", titulo){
   setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; setTimeout(()=>t.remove(),300); }, tipo==="err"?6000:3000);
 }
 
+// Valida uma lista de [condição, mensagem]; no primeiro erro mostra toast e retorna false.
+function validar(regras){
+  for(const [ok,msg] of regras){ if(!ok){ toast(msg,"err","Dados inválidos"); return false; } }
+  return true;
+}
+
 // ── CONFIRMAÇÃO DESTRUTIVA ────────────────────────────────────────────────────
 function confirmarLimpar(cb) {
   const ov = document.createElement('div');
@@ -754,10 +760,14 @@ function renderProd(){
 function saveProd(){
   const d={
     id:prodForm.id||null,
-    nome:sv("pf-nome"),categoria:sv("pf-cat"),unidade:sv("pf-un"),
+    nome:sv("pf-nome").trim(),categoria:sv("pf-cat"),unidade:sv("pf-un"),
     capacidade_ml:nv("pf-cap"),preco_compra:nv("pf-custo"),
     preco_venda:nv("pf-venda"),estoque_min:nv("pf-min"),estoque_inicial:nv("pf-ini"),
   };
+  if(!validar([
+    [d.nome, "Informe o nome do produto."],
+    [d.capacidade_ml>=0&&d.preco_compra>=0&&d.preco_venda>=0&&d.estoque_min>=0&&d.estoque_inicial>=0, "Valores não podem ser negativos."],
+  ])) return;
   FS.save("produtos",d); prodForm=null;
 }
 
@@ -959,9 +969,13 @@ function renderFichaForm(){
 function saveFicha(){
   const d={
     id:fichaForm.id||null,
-    nome:sv("ff-nome"),categoria:sv("ff-cat"),preco_venda:nv("ff-venda"),
+    nome:sv("ff-nome").trim(),categoria:sv("ff-cat"),preco_venda:nv("ff-venda"),
     ingredientes:fichaForm.ingredientes||[],
   };
+  if(!validar([
+    [d.nome, "Informe o nome da ficha."],
+    [d.preco_venda>=0, "O preço de venda não pode ser negativo."],
+  ])) return;
   FS.save("fichas",d); fichaForm=null;
 }
 
@@ -1172,13 +1186,20 @@ function calcCpTot(){
 
 function saveCp(){
   const pid=sv("cp-prod");
-  if(!pid){alert("Selecione um produto");return;}
   const p=S.produtos.find(x=>x.id===pid);
   const qtd=nv("cp-qtd");
   const cu=nv("cp-cu")||(p?p.preco_compra:0);
+  // Data vazia → hoje (dd/mm, mesmo formato do campo), em vez de barrar.
+  const hoje=new Date();
+  const data=sv("cp-data")||`${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}`;
+  if(!validar([
+    [pid, "Selecione um produto."],
+    [qtd>0, "A quantidade deve ser maior que zero."],
+    [cu>=0, "O custo unitário não pode ser negativo."],
+  ])) return;
   FS.save("compras",{
     id:null,produto_id:pid,sem:sv("cp-sem"),
-    data:sv("cp-data"),qtd,custo_unit:cu,
+    data,qtd,custo_unit:cu,
     total:nv("cp-tot")||qtd*cu,forn:sv("cp-forn"),
   });
   cpForm=null;
@@ -1415,11 +1436,17 @@ function addVenda(eid){
 }
 
 function saveVenda(eid){
-  const raw=sv("vf-item"); if(!raw){alert("Selecione um item");return;}
-  const [tipo,item_id]=raw.split("::");
+  const raw=sv("vf-item");
+  const [tipo,item_id]=(raw||"").split("::");
+  const qv=nv("vf-vend"), qc=nv("vf-cort");
+  if(!validar([
+    [raw, "Selecione um item."],
+    [qv>=0&&qc>=0, "Quantidades não podem ser negativas."],
+    [qv>0||qc>0, "Informe ao menos uma quantidade vendida ou cortesia."],
+  ])) return;
   FS.save("evento_vendas",{
     id:null,evento_id:eid,tipo,item_id,
-    qtd_vendida:nv("vf-vend"),qtd_cortesia:nv("vf-cort"),
+    qtd_vendida:qv,qtd_cortesia:qc,
   });
   const d=el("venda-form-"+eid); if(d) d.innerHTML="";
 }
@@ -1427,11 +1454,16 @@ function saveVenda(eid){
 function saveEv(){
   const d={
     id:evForm.id||null,
-    data:sv("ef-data"),nome:sv("ef-nome"),
+    data:sv("ef-data").trim(),nome:sv("ef-nome").trim(),
     publico:nv("ef-pub"),vips:nv("ef-vips"),
     entrada:nv("ef-ent"),dj:nv("ef-dj"),
     seguranca:nv("ef-seg"),staff:nv("ef-sta"),outros:nv("ef-out"),
   };
+  if(!validar([
+    [d.nome, "Informe o nome do evento."],
+    [d.data, "Informe a data do evento."],
+    [d.publico>=0&&d.vips>=0&&d.entrada>=0&&d.dj>=0&&d.seguranca>=0&&d.staff>=0&&d.outros>=0, "Valores não podem ser negativos."],
+  ])) return;
   FS.save("eventos",d); evForm=null;
 }
 
@@ -1501,7 +1533,10 @@ function addCusto(){
   const nome=el("cf-nome")?.value.trim();
   const valor=parseFloat(el("cf-val")?.value)||0;
   const mes=el("cf-mes")?.value||S.mesSel||new Date().toISOString().slice(0,7);
-  if(!nome||!valor) return;
+  if(!validar([
+    [nome, "Informe o nome do custo."],
+    [valor>0, "O valor deve ser maior que zero."],
+  ])) return;
   FS.save("custos",{id:null,nome,valor,mes}); // auto-id do Firestore (evita colisão multiusuário)
   el("cf-nome").value=""; el("cf-val").value="";
 }
@@ -1718,7 +1753,10 @@ async function salvarInventario(){
   const data=el("inv-data")?.value||new Date().toLocaleDateString("pt-BR");
   const contagens={};
   Object.entries(invContagens).forEach(([k,v])=>{if(v!==undefined)contagens[k]=parseFloat(v)||0;});
-  if(!Object.keys(contagens).length){alert("Preencha ao menos uma contagem física.");return;}
+  if(!validar([
+    [Object.keys(contagens).length>0, "Preencha ao menos uma contagem física."],
+    [Object.values(contagens).every(n=>n>=0), "Contagens não podem ser negativas."],
+  ])) return;
   // Chave natural = período (mês) + semana. Em vez de criar um doc novo a cada
   // salvamento (que duplicava), reaproveita o doc existente e mescla as contagens.
   const mes = S.mesSel || new Date().toISOString().slice(0,7);

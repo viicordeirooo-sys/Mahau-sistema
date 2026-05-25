@@ -262,9 +262,10 @@ const FS = {
     if(!db){ toast("Banco indisponível — alteração não salva.","err"); return false; }
     try {
       const ts = firebase.firestore.FieldValue.serverTimestamp();
-      // Update usa merge:true para não apagar createdAt (e campos futuros) no overwrite.
+      // Update usa merge:true para não apagar createdAt/orgId (e campos futuros) no overwrite.
       if(data.id) await db.collection(col).doc(String(data.id)).set({...data, updatedAt:ts}, {merge:true});
-      else { const r=await db.collection(col).add({...data, createdAt:ts, updatedAt:ts}); await r.update({id:r.id}); }
+      // orgId carimbado na criação (groundwork multi-tenant; app ainda não filtra por ele).
+      else { const r=await db.collection(col).add({...data, orgId:data.orgId||"default", createdAt:ts, updatedAt:ts}); await r.update({id:r.id}); }
       return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },

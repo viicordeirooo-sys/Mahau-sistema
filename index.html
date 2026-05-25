@@ -366,7 +366,7 @@ function mesesDisponiveis(){
   const set=new Set();
   S.eventos.forEach(e=>{if(e.data)set.add(e.data.slice(0,7))});
   S.compras.forEach(c=>{if(c.data)set.add(c.data.slice(0,7))});
-  S.inventarios.forEach(i=>{if(i.data)set.add(i.data.slice(0,7))});
+  S.inventarios.forEach(i=>{if(i.mes)set.add(i.mes)});
   S.custos.forEach(c=>{if(c.mes)set.add(c.mes)});
   return [...set].sort().reverse();
 }
@@ -1550,7 +1550,8 @@ let invSem="S1",invData="",invSaving=false,invContagens={};
 
 function renderInventario(){
   const semOpts=["S1","S2","S3","S4"];
-  const historico=S.inventarios.filter(i=>noMes(i.data)).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const historico=S.inventarios.filter(i=>!S.mesSel||i.mes===S.mesSel)
+    .sort((a,b)=>(b.mes||"").localeCompare(a.mes||"")||(b.data||"").localeCompare(a.data||""));
 
   let rows=S.produtos.filter(p=>p.capacidade_ml&&p.preco_compra)
     .sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.nome.localeCompare(b.nome));
@@ -1647,10 +1648,21 @@ async function salvarInventario(){
   const contagens={};
   Object.entries(invContagens).forEach(([k,v])=>{if(v!==undefined)contagens[k]=parseFloat(v)||0;});
   if(!Object.keys(contagens).length){alert("Preencha ao menos uma contagem física.");return;}
-  const ok=await FS.save("inventarios",{id:null,semana:invSem,data,contagens});
+  // Chave natural = período (mês) + semana. Em vez de criar um doc novo a cada
+  // salvamento (que duplicava), reaproveita o doc existente e mescla as contagens.
+  const mes = S.mesSel || new Date().toISOString().slice(0,7);
+  const existente = S.inventarios.find(i=>i.mes===mes && i.semana===invSem);
+  const contagensFinais = existente ? {...existente.contagens, ...contagens} : contagens;
+  const ok=await FS.save("inventarios",{
+    id: existente ? existente.id : null,
+    mes, semana:invSem, data, contagens:contagensFinais
+  });
   if(!ok) return;
   invContagens={};
-  alert("Inventário salvo! "+Object.keys(contagens).length+" produtos contados.");
+  const novos=Object.keys(contagens).length, total=Object.keys(contagensFinais).length;
+  alert(existente
+    ? `Inventário atualizado (${invSem} · ${fmtMes(mes)})!\n${novos} contagem(ns) gravada(s) · ${total} produtos no total.`
+    : `Inventário salvo! ${novos} produtos contados.`);
 }
 
 

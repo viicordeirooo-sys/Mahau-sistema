@@ -1431,7 +1431,7 @@ function addCusto(){
   const valor=parseFloat(el("cf-val")?.value)||0;
   const mes=el("cf-mes")?.value||S.mesSel||new Date().toISOString().slice(0,7);
   if(!nome||!valor) return;
-  FS.save("custos",{id:"c_"+Date.now(),nome,valor,mes});
+  FS.save("custos",{id:null,nome,valor,mes}); // auto-id do Firestore (evita colisão multiusuário)
   el("cf-nome").value=""; el("cf-val").value="";
 }
 

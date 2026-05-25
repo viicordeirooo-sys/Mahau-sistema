@@ -564,6 +564,15 @@ function render(){
   if(p==="fecha")   renderFechamento();
 }
 
+// Coalesce múltiplos disparos (ex.: 8 snapshots no load) em um único render por frame.
+// Ações de usuário continuam chamando render() direto para resposta imediata.
+let _renderQueued=false;
+function scheduleRender(){
+  if(_renderQueued) return;
+  _renderQueued=true;
+  requestAnimationFrame(()=>{ _renderQueued=false; render(); });
+}
+
 function kpi(title,value,sub,color,accent){
   return `<div class="kpi" style="border-top:2px solid ${accent||"#21262d"}">
     <div class="kpi-l">${title}</div>
@@ -2268,15 +2277,15 @@ let _unsubs = [];
 // Anexa os listeners do Firestore. Idempotente: não duplica se já vinculado.
 function bindData(){
   if(_unsubs.length || !db) return;
-  _unsubs.push(FS.listen("produtos",      d=>{S.produtos=d;render();}));
-  _unsubs.push(FS.listen("fichas",        d=>{S.fichas=d;render();}));
-  _unsubs.push(FS.listen("compras",       d=>{S.compras=d;render();}));
-  _unsubs.push(FS.listen("eventos",       d=>{S.eventos=d;render();}));
-  _unsubs.push(FS.listen("evento_vendas", d=>{S.evento_vendas=d;render();}));
-  _unsubs.push(FS.listen("custos",        d=>{S.custos=d;render();}));
-  _unsubs.push(FS.listen("inventarios",   d=>{S.inventarios=d;render();}));
+  _unsubs.push(FS.listen("produtos",      d=>{S.produtos=d;scheduleRender();}));
+  _unsubs.push(FS.listen("fichas",        d=>{S.fichas=d;scheduleRender();}));
+  _unsubs.push(FS.listen("compras",       d=>{S.compras=d;scheduleRender();}));
+  _unsubs.push(FS.listen("eventos",       d=>{S.eventos=d;scheduleRender();}));
+  _unsubs.push(FS.listen("evento_vendas", d=>{S.evento_vendas=d;scheduleRender();}));
+  _unsubs.push(FS.listen("custos",        d=>{S.custos=d;scheduleRender();}));
+  _unsubs.push(FS.listen("inventarios",   d=>{S.inventarios=d;scheduleRender();}));
   _unsubs.push(db.collection("config").doc("settings").onSnapshot(
-    s=>{ if(s.exists)S.config=s.data();render(); },
+    s=>{ if(s.exists)S.config=s.data();scheduleRender(); },
     e=>toast(FS._msg(e),"err","Falha ao carregar config")));
   // Produtos são cadastrados manualmente via botão na página Produtos
 }

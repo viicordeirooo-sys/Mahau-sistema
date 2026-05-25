@@ -430,21 +430,39 @@ function navMes(delta){
 }
 
 // ── CALCS ─────────────────────────────────────────────────────────────────────
-function estoqueAtual(pid) {
-  const p = S.produtos.find(x=>x.id===pid); if(!p) return 0;
-  const cap = p.capacidade_ml||1;
-  let ml = (p.estoque_inicial||0)*cap;
-  S.compras.filter(c=>c.produto_id===pid).forEach(c=>{ ml+=(c.qtd||0)*cap; });
+// Índice memoizado de movimentação de estoque, construído em UMA passada sobre
+// compras + vendas. Antes, estoqueAtual varria S.compras e S.evento_vendas a cada
+// chamada → O(produtos × movimentos), e algumas telas chamavam 3-5×/produto.
+// Agora a agregação é feita uma vez e cada estoqueAtual vira O(1). O cache é
+// invalidado em bindData (_estoqueIdx=null) quando produtos/fichas/compras/
+// evento_vendas mudam. Semântica idêntica: tudo em ml, depois /cap.
+let _estoqueIdx=null;
+function estoqueIndex(){
+  if(_estoqueIdx) return _estoqueIdx;
+  const cap={};      S.produtos.forEach(p=>{cap[p.id]=p.capacidade_ml||1;});
+  const fichaMap={}; S.fichas.forEach(f=>{fichaMap[f.id]=f;});
+  const idx={};
+  const get=pid=>(idx[pid]||(idx[pid]={entradasMl:0,consumoMl:0}));
+  S.compras.forEach(c=>{ if(c.produto_id) get(c.produto_id).entradasMl+=(c.qtd||0)*(cap[c.produto_id]||1); });
   S.evento_vendas.forEach(v=>{
     const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-    if(v.tipo==="produto"&&v.item_id===pid){ ml-=qtd*cap; }
-    if(v.tipo==="ficha"){
-      const f=S.fichas.find(x=>x.id===v.item_id);
+    if(v.tipo==="produto"&&v.item_id){ get(v.item_id).consumoMl+=qtd*(cap[v.item_id]||1); }
+    else if(v.tipo==="ficha"){
+      const f=fichaMap[v.item_id];
       if(f&&f.ingredientes) f.ingredientes.forEach(ing=>{
-        if(ing.produto_id===pid) ml-=qtd*(ing.quantidade_ml||0);
+        if(ing.produto_id) get(ing.produto_id).consumoMl+=qtd*(ing.quantidade_ml||0);
       });
     }
   });
+  _estoqueIdx=idx;
+  return idx;
+}
+
+function estoqueAtual(pid) {
+  const p = S.produtos.find(x=>x.id===pid); if(!p) return 0;
+  const cap = p.capacidade_ml||1;
+  const agg = estoqueIndex()[pid] || {entradasMl:0,consumoMl:0};
+  const ml = (p.estoque_inicial||0)*cap + agg.entradasMl - agg.consumoMl;
   return ml/cap;
 }
 
@@ -2277,11 +2295,11 @@ let _unsubs = [];
 // Anexa os listeners do Firestore. Idempotente: não duplica se já vinculado.
 function bindData(){
   if(_unsubs.length || !db) return;
-  _unsubs.push(FS.listen("produtos",      d=>{S.produtos=d;scheduleRender();}));
-  _unsubs.push(FS.listen("fichas",        d=>{S.fichas=d;scheduleRender();}));
-  _unsubs.push(FS.listen("compras",       d=>{S.compras=d;scheduleRender();}));
+  _unsubs.push(FS.listen("produtos",      d=>{S.produtos=d;_estoqueIdx=null;scheduleRender();}));
+  _unsubs.push(FS.listen("fichas",        d=>{S.fichas=d;_estoqueIdx=null;scheduleRender();}));
+  _unsubs.push(FS.listen("compras",       d=>{S.compras=d;_estoqueIdx=null;scheduleRender();}));
   _unsubs.push(FS.listen("eventos",       d=>{S.eventos=d;scheduleRender();}));
-  _unsubs.push(FS.listen("evento_vendas", d=>{S.evento_vendas=d;scheduleRender();}));
+  _unsubs.push(FS.listen("evento_vendas", d=>{S.evento_vendas=d;_estoqueIdx=null;scheduleRender();}));
   _unsubs.push(FS.listen("custos",        d=>{S.custos=d;scheduleRender();}));
   _unsubs.push(FS.listen("inventarios",   d=>{S.inventarios=d;scheduleRender();}));
   _unsubs.push(db.collection("config").doc("settings").onSnapshot(

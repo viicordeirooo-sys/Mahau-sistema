@@ -15,6 +15,20 @@ const Domain = {
     return dateStr.slice(0,7)===mesSel;
   },
 
+  // "YYYY-MM-DD" → "DD/MM/YYYY". Outros formatos (ex.: "dd/mm" legado) passam direto.
+  fmtData(d){
+    if(typeof d!=="string") return "";
+    const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : d;
+  },
+
+  // Período "YYYY-MM" a partir de "YYYY-MM-DD" ou "YYYY-MM". "dd/mm" legado → "".
+  mesDeData(d){
+    if(typeof d!=="string") return "";
+    const m=/^(\d{4}-\d{2})/.exec(d);
+    return m ? m[1] : "";
+  },
+
   // Índice de movimentação de estoque construído em UMA passada.
   // Retorna { [produtoId]: { entradasMl, consumoMl } }. Tudo em ml.
   estoqueIndex(produtos, fichas, compras, vendas){

@@ -1860,7 +1860,7 @@ function descreveDoc(col,d){
     case "inventarios_mensais": return `Mensal · ${fmtMes(d.mes||"")||d.data||""}`;
     case "semanas_conciliacao": return `${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "estoques": return `Estoque ${d.tipo||""} · ${fmtData(d.data_contagem)}`;
-    case "vendas_zig": return `${d.nome_evento||"(vendas)"} · ${fmtData(d.data_evento)}`;
+    case "vendas_zig": return `Saída ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "mapeamento_zig": return `${d.sku_zig||""} · ${d.nome_zig||""}`;
     default: return d.id||"";
   }
@@ -1897,7 +1897,7 @@ function renderLixeira(){
 const CONCIL_TABS=[
   {id:"semanas", label:"📆 Semanas"},
   {id:"estoque", label:"📦 Estoque"},
-  {id:"vendas",  label:"🎟 Vendas Zig"},
+  {id:"vendas",  label:"📊 Saída Zig"},
   {id:"mapa",    label:"🔗 Mapeamento"},
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
@@ -1935,7 +1935,7 @@ function concilSemanasHTML(){
     <div class="box">
       <div class="bh"><span class="bt">${semanas.length} semana${semanas.length!==1?"s":""}</span></div>
       <div class="tw"><table>
-        <thead><tr><th>Período</th><th class="r">Estoques</th><th class="r">Eventos</th><th>Status</th><th class="r">Ações</th></tr></thead>
+        <thead><tr><th>Período</th><th class="r">Estoques</th><th class="r">Saída</th><th>Status</th><th class="r">Ações</th></tr></thead>
         <tbody>${semanas.length?semanas.map(s=>{
           const nEst=S.estoques.filter(e=>e.semana_id===s.id).length;
           const nEv=S.vendas_zig.filter(e=>e.semana_id===s.id).length;
@@ -2080,66 +2080,52 @@ async function salvarEstoqueImport(){
   toast(`${produtos.length} itens salvos como estoque ${tipo}.`,"ok","Estoque importado");
 }
 
-// ── Conciliação · aba Vendas Zig (1c) ────────────────────────────────────────
+// ── Conciliação · aba Saída Zig (1c) ──────────────────────────────────────────
+// Input = "Saída geral de produtos" (consolidado da semana: SKU/Produto/Quantidade).
+// Um arquivo por semana (substitui o anterior). Doc: {semana_id, periodo_inicio,
+// periodo_fim, itens:[{sku,produto,quantidade}]}. NÃO é o evento financeiro.
 function concilVendasHTML(){
   const sel=S.concilSemanaSel;
-  if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para importar eventos.</div>`;
+  if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para importar a Saída Geral.</div>`;
   const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
   const imp=vendasZigImport;
   let html=`<div class="fb">
-    <div class="ft">Importar Vendas Zig — semana ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
-    <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX de <strong>produtos vendidos</strong> da Zig (abas "Total de produtos vendidos" + "Montáveis"), só para a conciliação de estoque — <strong>não</strong> é o evento financeiro (esse continua manual em Eventos). Pode importar vários dias na mesma semana.</div>
+    <div class="ft">Importar Saída Geral (Zig) — semana ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX da <strong>Saída Geral de produtos</strong> (consolidado da semana: SKU, Produto, Quantidade), só para a conciliação de estoque — <strong>não</strong> é o evento financeiro (esse continua manual em Eventos). Um arquivo por semana: reimportar <strong>substitui</strong> o anterior.</div>
     <input type="file" id="ezig-file" accept=".xlsx,.xls" onchange="importVendasZigFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
   </div>`;
   if(imp){
-    const totalV=imp.vendas.reduce((a,x)=>a+(x.valor_total||0),0);
-    const nMont=imp.vendas.filter(x=>x.montavel).length;
+    const totalUn=imp.itens.reduce((a,x)=>a+(x.quantidade||0),0);
     html+=`<div class="kpis">
-      ${kpi("Itens vendidos",imp.vendas.length+"",imp.fileName,"#e6edf3","#2563eb")}
-      ${kpi("Valor total",R(totalV),"do evento","#e6edf3","#22c55e")}
-      ${kpi("Montáveis (vendas)",nMont+"","combos/drinks","#e6edf3","#8b5cf6")}
-      ${kpi("Linhas de montáveis",imp.montaveis.length+"",imp.montaveis.length?"detalhe de combos":"sem aba","#e6edf3","#f59e0b")}
+      ${kpi("SKUs lidos",imp.itens.length+"",imp.fileName,"#e6edf3","#2563eb")}
+      ${kpi("Total de unidades",totalUn.toLocaleString("pt-BR"),"somatório de saída","#e6edf3","#8b5cf6")}
+      ${kpi("Período (do arquivo)",imp.periodo.inicio?fmtData(imp.periodo.inicio)+" → "+fmtData(imp.periodo.fim):"—","detectado no título","#e6edf3","#22c55e")}
     </div>
-    <div class="fb">
-      <div class="fg g3">
-        <div class="fi"><label>Data das vendas</label><input id="ezig-data" type="date" value="${imp.data||s.periodo_inicio||""}"></div>
-        <div class="fi"><label>Identificação</label><input id="ezig-nome" value="Vendas ${fmtData(imp.data||s.periodo_inicio)}"></div>
-        <div class="fi" style="justify-content:flex-end;flex-direction:row;align-items:flex-end">
-          <button class="btn bp" onclick="salvarVendasZig()">💾 Salvar Vendas</button>
-        </div>
-      </div>
-    </div>
+    <div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">⚠ A Saída Geral conta combos em dobro (o combo pai e as garrafas internas vêm como linhas separadas). O motor de conciliação (Sprint 2) trata isso via mapeamento — aqui é só o import bruto.</div>
+    <div class="fb"><div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn bg_" onclick="vendasZigImport=null;renderConciliacao()">✕ Descartar</button>
+      <button class="btn bp" onclick="salvarVendasZig()">💾 Salvar Saída da Semana</button>
+    </div></div>
     <div class="box">
-      <div class="bh"><span class="bt">Vendas — ${imp.vendas.length}</span><button class="btn bg_ bsm" onclick="vendasZigImport=null;renderConciliacao()">✕ Descartar</button></div>
+      <div class="bh"><span class="bt">Preview — ${imp.itens.length} SKUs</span></div>
       <div class="tw"><table>
-        <thead><tr><th>SKU</th><th>Nome</th><th>Categoria</th><th>Mont.</th><th class="r">Qtd</th><th class="r">Valor</th></tr></thead>
-        <tbody>${imp.vendas.slice().sort((a,b)=>(b.valor_total||0)-(a.valor_total||0)).map(v=>`<tr>
-          <td class="mn mt">${v.sku||""}</td><td class="w6">${v.nome||""}</td><td class="mt">${v.categoria||""}</td>
-          <td>${v.montavel?chip("sim","#8b5cf6"):""}</td><td class="r mn">${v.quantidade||0}</td><td class="r mn">${R(v.valor_total||0)}</td>
+        <thead><tr><th>SKU</th><th>Produto</th><th class="r">Quantidade</th></tr></thead>
+        <tbody>${imp.itens.slice().sort((a,b)=>(b.quantidade||0)-(a.quantidade||0)).map(v=>`<tr>
+          <td class="mn mt">${v.sku||""}</td><td class="w6">${v.produto||""}</td><td class="r mn">${v.quantidade||0}</td>
         </tr>`).join("")}</tbody>
       </table></div>
-    </div>
-    ${imp.montaveis.length?`<div class="box">
-      <div class="bh"><span class="bt">Montáveis — ${imp.montaveis.length}</span></div>
-      <div class="tw"><table>
-        <thead><tr><th>SKU pai</th><th>Produto</th><th>Etapa</th><th>Item montável</th><th class="r">Qtd</th></tr></thead>
-        <tbody>${imp.montaveis.map(m=>`<tr>
-          <td class="mn mt">${m.sku_pai||""}</td><td class="w6">${m.produto_pai||""}</td><td class="mt">${m.etapa||""}</td>
-          <td>${m.item_montavel||""}</td><td class="r mn">${m.quantidade||0}</td>
-        </tr>`).join("")}</tbody>
-      </table></div>
-    </div>`:""}`;
+    </div>`;
   }
-  const docs=S.vendas_zig.filter(e=>e.semana_id===sel).sort((a,b)=>(a.data_evento||"").localeCompare(b.data_evento||""));
-  if(docs.length){
-    html+=`<div class="box"><div class="bh"><span class="bt">Vendas importadas desta semana</span></div>
-      <div class="tw"><table><thead><tr><th>Evento</th><th>Data</th><th class="r">Vendas</th><th class="r">Montáveis</th><th class="r">Valor</th><th></th></tr></thead>
-      <tbody>${docs.map(e=>{
-        const val=(e.vendas||[]).reduce((a,v)=>a+(v.valor_total||0),0);
-        return `<tr><td class="w6">${e.nome_evento||"(vendas)"}</td><td class="mn">${fmtData(e.data_evento)}</td>
-          <td class="r">${(e.vendas||[]).length}</td><td class="r">${(e.montaveis||[]).length}</td><td class="r mn">${R(val)}</td>
-          <td><button class="bi" onclick="softDel('vendas_zig','${e.id}')">✕</button></td></tr>`;
-      }).join("")}</tbody></table></div></div>`;
+  const doc=S.vendas_zig.find(e=>e.semana_id===sel);
+  if(doc){
+    const totalUn=(doc.itens||[]).reduce((a,v)=>a+(v.quantidade||0),0);
+    html+=`<div class="box"><div class="bh"><span class="bt">Saída salva desta semana</span></div>
+      <div class="tw"><table><thead><tr><th>Período</th><th class="r">SKUs</th><th class="r">Unidades</th><th></th></tr></thead>
+      <tbody><tr>
+        <td class="mn">${fmtData(doc.periodo_inicio)} → ${fmtData(doc.periodo_fim)}</td>
+        <td class="r">${(doc.itens||[]).length}</td><td class="r mn">${totalUn.toLocaleString("pt-BR")}</td>
+        <td><button class="bi" onclick="softDel('vendas_zig','${doc.id}')">✕</button></td>
+      </tr></tbody></table></div></div>`;
   }
   return html;
 }
@@ -2151,12 +2137,10 @@ function importVendasZigFile(input){
     try{
       const wb=XLSX.read(ev.target.result,{type:"array"});
       const N=Domain._norm, toM=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,blankrows:false});
-      let mv=null, mm=null;
-      for(const n of wb.SheetNames.filter(n=>N(n).includes("vendid")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseZigVendas(m).erro){ mv=m; break; } }
-      for(const n of wb.SheetNames.filter(n=>N(n).includes("montav")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseZigMontaveis(m).erro){ mm=m; break; } }
-      if(!mv){ toast("Não encontrei a aba de vendas (SKU/Nome/Quantidade).","err","Import"); return; }
-      vendasZigImport={ fileName:file.name, data:Domain.extrairDataZig(mv),
-        vendas:Domain.parseZigVendas(mv).itens, montaveis: mm?Domain.parseZigMontaveis(mm).itens:[] };
+      let mat=null;
+      for(const n of wb.SheetNames.filter(n=>N(n).includes("saida")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseSaidaGeral(m).erro){ mat=m; break; } }
+      if(!mat){ toast("Não encontrei a aba de Saída Geral (SKU/Produto/Quantidade).","err","Import"); return; }
+      vendasZigImport={ fileName:file.name, periodo:Domain.extrairPeriodoZig(mat), itens:Domain.parseSaidaGeral(mat).itens };
       renderConciliacao();
     }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
   };
@@ -2166,18 +2150,17 @@ function importVendasZigFile(input){
 async function salvarVendasZig(){
   const sel=S.concilSemanaSel;
   if(!vendasZigImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
-  const data=sv("ezig-data")||vendasZigImport.data||new Date().toISOString().slice(0,10);
-  const nome=sv("ezig-nome").trim()||("Vendas "+fmtData(data));
-  const nVendas=vendasZigImport.vendas.length, nMont=vendasZigImport.montaveis.length;
-  // Reusa o doc do mesmo (semana, data) em vez de duplicar ao reimportar.
-  const existente=S.vendas_zig.find(e=>e.semana_id===sel && e.data_evento===data);
+  const per=vendasZigImport.periodo||{}, n=vendasZigImport.itens.length;
+  // Um arquivo por semana → substitui o doc anterior da semana (reusa o id).
+  const existente=S.vendas_zig.find(e=>e.semana_id===sel);
   const ok=await FS.save("vendas_zig",{
-    id: existente?existente.id:null, semana_id:sel, data_evento:data, nome_evento:nome, mes:mesDeData(data),
-    vendas:vendasZigImport.vendas, montaveis:vendasZigImport.montaveis
+    id: existente?existente.id:null, semana_id:sel,
+    periodo_inicio:per.inicio||"", periodo_fim:per.fim||"", mes:mesDeData(per.inicio||""),
+    itens:vendasZigImport.itens
   });
   if(!ok) return;
   vendasZigImport=null; renderConciliacao();
-  toast(`${nome}: ${nVendas} vendas, ${nMont} montáveis salvos.`,"ok","Evento importado");
+  toast(`Saída da semana salva (${n} SKUs).`,"ok","Saída importada");
 }
 
 // ── Conciliação · aba Mapeamento Zig→Estoque (1d) ─────────────────────────────
@@ -2244,7 +2227,7 @@ function salvarMapa(){
 
 function concilMapaHTML(){
   const skusVistos={};
-  S.vendas_zig.forEach(e=>(e.vendas||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.nome||""; }));
+  S.vendas_zig.forEach(e=>(e.itens||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.produto||""; }));
   const mapados=new Set(S.mapeamento_zig.map(m=>m.sku_zig));
   const naoMap=Object.entries(skusVistos).filter(([sku])=>!mapados.has(sku)).map(([sku,nome])=>({sku,nome}));
   const maps=S.mapeamento_zig.slice().sort((a,b)=>(a.nome_zig||a.sku_zig||"").localeCompare(b.nome_zig||b.sku_zig||""));
@@ -2257,7 +2240,7 @@ function concilMapaHTML(){
         <td class="mn">${s.sku}</td><td class="w6">${s.nome}</td>
         <td class="r"><button class="btn bp bsm" data-n="${(s.nome||"").replace(/"/g,"&quot;")}" onclick="novoMapa('${s.sku}',this.dataset.n)">Mapear</button></td>
       </tr>`).join("")}</tbody></table></div>
-    </div>`:(S.vendas_zig.length?`<div class="ok-strip">Todos os SKUs das vendas importadas estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe vendas (aba 🎟) para detectar SKUs a mapear.</div>`)}
+    </div>`:(S.vendas_zig.length?`<div class="ok-strip">Todos os SKUs da Saída importada estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe a Saída Geral (aba 📊) para detectar SKUs a mapear.</div>`)}
     <div class="box">
       <div class="bh"><span class="bt">${maps.length} mapeamento(s)</span><button class="btn bp bsm" onclick="novoMapa('','')">+ Novo</button></div>
       <div class="tw"><table>

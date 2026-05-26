@@ -179,47 +179,38 @@ const Domain = {
     return {hRow:-1, col:null};
   },
 
-  // Data do evento a partir do título da Zig ("...no dia 22/05/2026") → ISO. Senão "".
-  extrairDataZig(matrix){
+  // Período do título da Saída Geral ("...entre 20/05/2026 e 25/05/2026") → {inicio,fim} ISO.
+  extrairPeriodoZig(matrix){
+    const datas=[];
     for(const row of (matrix||[]).slice(0,5)) for(const cell of (row||[])){
-      const m=/(\d{2})\/(\d{2})\/(\d{4})/.exec(cell==null?"":String(cell));
-      if(m) return `${m[3]}-${m[2]}-${m[1]}`;
+      const s=cell==null?"":String(cell);
+      const re=/(\d{2})\/(\d{2})\/(\d{4})/g; let m;
+      while((m=re.exec(s))) datas.push(`${m[3]}-${m[2]}-${m[1]}`);
     }
-    return "";
+    datas.sort();
+    return { inicio: datas[0]||"", fim: datas[datas.length-1]||datas[0]||"" };
   },
 
-  // Parser da aba "Total de produtos vendidos" da Zig (header dinâmico).
-  parseZigVendas(matrix){
-    const MAP={sku:"sku",nome:"nome",categoria:"categoria","operacao":"operacao",montavel:"montavel",
-      quantidade:"quantidade","valor unitario":"valor_unitario",subtotal:"subtotal",descontos:"descontos","valor total":"valor_total"};
-    const {hRow,col}=Domain._detectHeader(matrix,["sku","nome","quantidade"],MAP);
-    if(hRow<0||!col||col.sku===undefined||col.nome===undefined) return {erro:"Aba de vendas: cabeçalho não encontrado (SKU/Nome/Quantidade).",itens:[]};
+  // Parser da "Saída geral de produtos" da Zig (consolidado da semana; header dinâmico).
+  // Colunas: SKU, Produto, Quantidade. Sem montáveis, sem valor.
+  //
+  // ⚠️ DUPLA CONTAGEM NATIVA (relevante para o motor de conciliação — Sprint 2):
+  // A Saída Geral lista o COMBO PAI e os ITENS INTERNOS dele como linhas separadas.
+  // Ex.: Combo "03 Gold Label" (SKU 70o3, 4 un) E "Garrafa Gold Label" (SKU 173, 48 un)
+  // aparecem ambos — as 48 garrafas JÁ ESTÃO dentro dos 4 combos (4×12=48).
+  // O motor NÃO deve somar os dois. Estratégias (definir no Sprint 2):
+  //   (a) identificar combos via mapeamento_zig.tipo==="combo" e descontar os itens
+  //       internos do total; ou
+  //   (b) consumir SÓ os SKUs montáveis ("Garrafa X"/"Dose Y") e IGNORAR os SKUs de combo pai.
+  parseSaidaGeral(matrix){
+    const MAP={sku:"sku",produto:"produto",quantidade:"quantidade"};
+    const {hRow,col}=Domain._detectHeader(matrix,["sku","produto","quantidade"],MAP);
+    if(hRow<0||!col||col.sku===undefined||col.quantidade===undefined) return {erro:"Saída Geral: cabeçalho não encontrado (SKU/Produto/Quantidade).",itens:[]};
     const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
-    const bool=v=>v===true||["sim","true","1"].includes(Domain._norm(v));
     const itens=[];
     for(let i=hRow+1;i<matrix.length;i++){
       const r=matrix[i]||[]; const sku=txt(r[col.sku]); if(!sku) continue;
-      itens.push({ sku, nome:col.nome!=null?txt(r[col.nome]):"", categoria:col.categoria!=null?txt(r[col.categoria]):"",
-        montavel: col.montavel!=null?bool(r[col.montavel]):false,
-        quantidade: col.quantidade!=null?num(r[col.quantidade]):0,
-        valor_total: col.valor_total!=null?num(r[col.valor_total]):0 });
-    }
-    return {erro:null,hRow,itens};
-  },
-
-  // Parser da aba "Montáveis" da Zig (header dinâmico).
-  parseZigMontaveis(matrix){
-    const MAP={sku:"sku_pai",produto:"produto_pai","categoria produto":"categoria",
-      "etapa montavel":"etapa","item montavel":"item_montavel",quantidade:"quantidade"};
-    const {hRow,col}=Domain._detectHeader(matrix,["sku","item montavel"],MAP);
-    if(hRow<0||!col||col.item_montavel===undefined) return {erro:"Aba de montáveis: cabeçalho não encontrado (SKU/Item Montável).",itens:[]};
-    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
-    const itens=[];
-    for(let i=hRow+1;i<matrix.length;i++){
-      const r=matrix[i]||[]; const sku=txt(r[col.sku_pai]); if(!sku) continue;
-      itens.push({ sku_pai:sku, produto_pai:col.produto_pai!=null?txt(r[col.produto_pai]):"",
-        categoria:col.categoria!=null?txt(r[col.categoria]):"", etapa:col.etapa!=null?txt(r[col.etapa]):"",
-        item_montavel:txt(r[col.item_montavel]), quantidade:col.quantidade!=null?num(r[col.quantidade]):0 });
+      itens.push({ sku, produto: col.produto!=null?txt(r[col.produto]):"", quantidade: num(r[col.quantidade]) });
     }
     return {erro:null,hRow,itens};
   },

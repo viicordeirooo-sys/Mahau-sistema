@@ -165,6 +165,65 @@ const Domain = {
     return {erro:null, headerRow:hRow, itens};
   },
 
+  // Detecta a linha de header (que contém todas as `chaves` normalizadas) e devolve
+  // {hRow, col} com col = nomeColunaNormalizado→índice apenas para colunas em MAP.
+  _detectHeader(matrix, chaves, MAP){
+    const N=Domain._norm;
+    for(let i=0;i<(matrix||[]).length;i++){
+      const cells=(matrix[i]||[]).map(N);
+      if(chaves.every(k=>cells.includes(k))){
+        const col={}; cells.forEach((c,idx)=>{ if(MAP[c]!==undefined && col[MAP[c]]===undefined) col[MAP[c]]=idx; });
+        return {hRow:i, col};
+      }
+    }
+    return {hRow:-1, col:null};
+  },
+
+  // Data do evento a partir do título da Zig ("...no dia 22/05/2026") → ISO. Senão "".
+  extrairDataZig(matrix){
+    for(const row of (matrix||[]).slice(0,5)) for(const cell of (row||[])){
+      const m=/(\d{2})\/(\d{2})\/(\d{4})/.exec(cell==null?"":String(cell));
+      if(m) return `${m[3]}-${m[2]}-${m[1]}`;
+    }
+    return "";
+  },
+
+  // Parser da aba "Total de produtos vendidos" da Zig (header dinâmico).
+  parseZigVendas(matrix){
+    const MAP={sku:"sku",nome:"nome",categoria:"categoria","operacao":"operacao",montavel:"montavel",
+      quantidade:"quantidade","valor unitario":"valor_unitario",subtotal:"subtotal",descontos:"descontos","valor total":"valor_total"};
+    const {hRow,col}=Domain._detectHeader(matrix,["sku","nome","quantidade"],MAP);
+    if(hRow<0||!col||col.sku===undefined||col.nome===undefined) return {erro:"Aba de vendas: cabeçalho não encontrado (SKU/Nome/Quantidade).",itens:[]};
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
+    const bool=v=>v===true||["sim","true","1"].includes(Domain._norm(v));
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[]; const sku=txt(r[col.sku]); if(!sku) continue;
+      itens.push({ sku, nome:col.nome!=null?txt(r[col.nome]):"", categoria:col.categoria!=null?txt(r[col.categoria]):"",
+        montavel: col.montavel!=null?bool(r[col.montavel]):false,
+        quantidade: col.quantidade!=null?num(r[col.quantidade]):0,
+        valor_total: col.valor_total!=null?num(r[col.valor_total]):0 });
+    }
+    return {erro:null,hRow,itens};
+  },
+
+  // Parser da aba "Montáveis" da Zig (header dinâmico).
+  parseZigMontaveis(matrix){
+    const MAP={sku:"sku_pai",produto:"produto_pai","categoria produto":"categoria",
+      "etapa montavel":"etapa","item montavel":"item_montavel",quantidade:"quantidade"};
+    const {hRow,col}=Domain._detectHeader(matrix,["sku","item montavel"],MAP);
+    if(hRow<0||!col||col.item_montavel===undefined) return {erro:"Aba de montáveis: cabeçalho não encontrado (SKU/Item Montável).",itens:[]};
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[]; const sku=txt(r[col.sku_pai]); if(!sku) continue;
+      itens.push({ sku_pai:sku, produto_pai:col.produto_pai!=null?txt(r[col.produto_pai]):"",
+        categoria:col.categoria!=null?txt(r[col.categoria]):"", etapa:col.etapa!=null?txt(r[col.etapa]):"",
+        item_montavel:txt(r[col.item_montavel]), quantidade:col.quantidade!=null?num(r[col.quantidade]):0 });
+    }
+    return {erro:null,hRow,itens};
+  },
+
   // Casa itens parseados com o cadastro `produtos` (por nome normalizado) e marca flags.
   casarEstoque(itens, produtos){
     const N=Domain._norm;

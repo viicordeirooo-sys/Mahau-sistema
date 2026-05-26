@@ -50,6 +50,15 @@ Field names are set in the `save*` functions; match them exactly when adding fie
 
 *(The former ZigPay POS import — `parseZigFile`/`importZigPay`/`ZIG_*` — was removed in the events refactor, since events no longer track per-product sales.)*
 
+## Conciliação de estoque (módulo)
+
+Conciliação semanal que cruza dados de venda da Zig com a contagem física, **separado** do evento financeiro `eventos`. Página **"🔄 Conciliação"** (`renderConciliacao`) com sub-abas (`S.concilTab`): Semanas · Estoque · Vendas Zig · Mapeamento. Uma semana ativa (`S.concilSemanaSel`) é o contexto dos imports; usa o período da semana, **não** o filtro de mês global.
+
+- **Coleções próprias** (no `bindData`/Lixeira, fora do `STOCK` — não afetam `estoqueAtual`): `semanas_conciliacao` (`{periodo_inicio, periodo_fim, status}`), `estoques` (`{semana_id, tipo:'antes'|'depois', data_contagem, produtos:[...]}` — contagem física por semana, **separada** de `inventarios`/`inventarios_mensais`), `vendas_zig` (`{semana_id, data_evento, nome_evento, vendas:[...], montaveis:[...]}` — XLSX de **produtos vendidos** da Zig, **NÃO** é o evento financeiro), `mapeamento_zig` (`{sku_zig, nome_zig, tipo:'direto'|'combo'|'montavel'|'ignorar', regras:[...], garrafa_qtd, redbull_qtd}`). *(Sprint 2 adiciona `conciliacoes`.)*
+- **Parsers puros em `domain.js`** (XLSX via SheetJS, header detectado dinamicamente): `_norm`, `_detectHeader`, `parseEstoqueRows` + `casarEstoque` (estoque da funcionária → casa por nome com `produtos`, flags novo/custo±30%/negativo), `parseZigVendas`, `parseZigMontaveis`, `extrairDataZig`. Validados contra arquivos reais.
+- **Status:** Sprint 1 pronto (imports de estoque/vendas + CRUD de mapeamento com detecção de SKU não mapeado). **Sprint 2 (pendente):** import de cortesias/estornos, registro de compras (⚠️ o plano define um `compras` que colide com a coleção `compras` existente que alimenta `estoqueAtual` — resolver nome/schema antes), e o **motor de conciliação** (`estoque_esperado = antes + compras − consumo`) + tela de resultado.
+- Plano completo em `PLANO_TECNICO_CONCILIACAO_MAHAU.md` e planilhas reais ficam na raiz, **gitignored** (`*.xlsx`) — o Vercel serve a raiz publicamente.
+
 ## Conventions
 
 - **Deletes are soft by default:** the ✕ buttons call `softDel(col,id)` (simple confirm → `FS.del`, which sets `deletedAt`). Listeners in `bindData` filter `deletedAt` out of `S[col]` and into `S._trash[col]`, so all calc/render automatically excludes soft-deleted docs. The **Lixeira** page (`renderLixeira`) restores (`FS.restore`, clears `deletedAt`) or permanently deletes. **Permanent deletion** (`FS.hardDel`) is the only thing still gated by the typed-`LIMPAR` modal `confirmarLimpar(cb)` (used in the Lixeira).

@@ -380,7 +380,7 @@ const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
   custos:[],inventarios:[],inventarios_mensais:[],
-  semanas_conciliacao:[],estoques:[],eventos_zig:[],mapeamento_zig:[], // módulo Conciliação
+  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[], // módulo Conciliação
   config:{datasNoMes:4},
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null,  // null = todos os meses
@@ -1848,7 +1848,7 @@ const LIXEIRA_COLS=[
   {col:"inventarios_mensais", label:"Inventários (mensal)"},
   {col:"semanas_conciliacao", label:"Semanas de Conciliação"},
   {col:"estoques",        label:"Estoques (conciliação)"},
-  {col:"eventos_zig",     label:"Eventos Zig"},
+  {col:"vendas_zig",     label:"Vendas Zig"},
   {col:"mapeamento_zig",  label:"Mapeamentos Zig"},
 ];
 function descreveDoc(col,d){
@@ -1860,7 +1860,7 @@ function descreveDoc(col,d){
     case "inventarios_mensais": return `Mensal · ${fmtMes(d.mes||"")||d.data||""}`;
     case "semanas_conciliacao": return `${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "estoques": return `Estoque ${d.tipo||""} · ${fmtData(d.data_contagem)}`;
-    case "eventos_zig": return `${d.nome_evento||"(evento)"} · ${fmtData(d.data_evento)}`;
+    case "vendas_zig": return `${d.nome_evento||"(vendas)"} · ${fmtData(d.data_evento)}`;
     case "mapeamento_zig": return `${d.sku_zig||""} · ${d.nome_zig||""}`;
     default: return d.id||"";
   }
@@ -1897,11 +1897,11 @@ function renderLixeira(){
 const CONCIL_TABS=[
   {id:"semanas", label:"📆 Semanas"},
   {id:"estoque", label:"📦 Estoque"},
-  {id:"eventos", label:"🎟 Eventos Zig"},
+  {id:"vendas",  label:"🎟 Vendas Zig"},
   {id:"mapa",    label:"🔗 Mapeamento"},
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
-let eventoZigImport=null; // preview do import de evento Zig (vendas+montáveis), antes de salvar
+let vendasZigImport=null; // preview do import de VENDAS Zig (produtos vendidos+montáveis) p/ conciliação de estoque — NÃO é o evento financeiro
 let mapaForm=null; // formulário de mapeamento Zig→Estoque em edição
 
 function renderConciliacao(){
@@ -1911,7 +1911,7 @@ function renderConciliacao(){
   </div>`;
   const corpo = tab==="semanas" ? concilSemanasHTML()
     : tab==="estoque" ? concilEstoqueHTML()
-    : tab==="eventos" ? concilEventosHTML()
+    : tab==="vendas" ? concilVendasHTML()
     : concilMapaHTML();
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
@@ -1938,7 +1938,7 @@ function concilSemanasHTML(){
         <thead><tr><th>Período</th><th class="r">Estoques</th><th class="r">Eventos</th><th>Status</th><th class="r">Ações</th></tr></thead>
         <tbody>${semanas.length?semanas.map(s=>{
           const nEst=S.estoques.filter(e=>e.semana_id===s.id).length;
-          const nEv=S.eventos_zig.filter(e=>e.semana_id===s.id).length;
+          const nEv=S.vendas_zig.filter(e=>e.semana_id===s.id).length;
           const ativa=sel===s.id;
           return `<tr style="${ativa?"background:#1c2332":""}">
             <td class="w6">${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</td>
@@ -2080,16 +2080,16 @@ async function salvarEstoqueImport(){
   toast(`${produtos.length} itens salvos como estoque ${tipo}.`,"ok","Estoque importado");
 }
 
-// ── Conciliação · aba Eventos Zig (1c) ────────────────────────────────────────
-function concilEventosHTML(){
+// ── Conciliação · aba Vendas Zig (1c) ────────────────────────────────────────
+function concilVendasHTML(){
   const sel=S.concilSemanaSel;
   if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para importar eventos.</div>`;
   const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
-  const imp=eventoZigImport;
+  const imp=vendasZigImport;
   let html=`<div class="fb">
-    <div class="ft">Importar Evento Zig — semana ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
-    <div style="font-size:11px;color:#484f58;margin-bottom:10px">Envie o XLSX da Zig (abas "Total de produtos vendidos" + "Montáveis"). Pode importar vários eventos na mesma semana.</div>
-    <input type="file" id="ezig-file" accept=".xlsx,.xls" onchange="importEventoZigFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+    <div class="ft">Importar Vendas Zig — semana ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX de <strong>produtos vendidos</strong> da Zig (abas "Total de produtos vendidos" + "Montáveis"), só para a conciliação de estoque — <strong>não</strong> é o evento financeiro (esse continua manual em Eventos). Pode importar vários dias na mesma semana.</div>
+    <input type="file" id="ezig-file" accept=".xlsx,.xls" onchange="importVendasZigFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
   </div>`;
   if(imp){
     const totalV=imp.vendas.reduce((a,x)=>a+(x.valor_total||0),0);
@@ -2102,15 +2102,15 @@ function concilEventosHTML(){
     </div>
     <div class="fb">
       <div class="fg g3">
-        <div class="fi"><label>Data do evento</label><input id="ezig-data" type="date" value="${imp.data||s.periodo_inicio||""}"></div>
-        <div class="fi"><label>Nome do evento</label><input id="ezig-nome" value="Evento ${fmtData(imp.data||s.periodo_inicio)}"></div>
+        <div class="fi"><label>Data das vendas</label><input id="ezig-data" type="date" value="${imp.data||s.periodo_inicio||""}"></div>
+        <div class="fi"><label>Identificação</label><input id="ezig-nome" value="Vendas ${fmtData(imp.data||s.periodo_inicio)}"></div>
         <div class="fi" style="justify-content:flex-end;flex-direction:row;align-items:flex-end">
-          <button class="btn bp" onclick="salvarEventoZig()">💾 Salvar Evento</button>
+          <button class="btn bp" onclick="salvarVendasZig()">💾 Salvar Vendas</button>
         </div>
       </div>
     </div>
     <div class="box">
-      <div class="bh"><span class="bt">Vendas — ${imp.vendas.length}</span><button class="btn bg_ bsm" onclick="eventoZigImport=null;renderConciliacao()">✕ Descartar</button></div>
+      <div class="bh"><span class="bt">Vendas — ${imp.vendas.length}</span><button class="btn bg_ bsm" onclick="vendasZigImport=null;renderConciliacao()">✕ Descartar</button></div>
       <div class="tw"><table>
         <thead><tr><th>SKU</th><th>Nome</th><th>Categoria</th><th>Mont.</th><th class="r">Qtd</th><th class="r">Valor</th></tr></thead>
         <tbody>${imp.vendas.slice().sort((a,b)=>(b.valor_total||0)-(a.valor_total||0)).map(v=>`<tr>
@@ -2130,21 +2130,21 @@ function concilEventosHTML(){
       </table></div>
     </div>`:""}`;
   }
-  const docs=S.eventos_zig.filter(e=>e.semana_id===sel).sort((a,b)=>(a.data_evento||"").localeCompare(b.data_evento||""));
+  const docs=S.vendas_zig.filter(e=>e.semana_id===sel).sort((a,b)=>(a.data_evento||"").localeCompare(b.data_evento||""));
   if(docs.length){
-    html+=`<div class="box"><div class="bh"><span class="bt">Eventos importados desta semana</span></div>
+    html+=`<div class="box"><div class="bh"><span class="bt">Vendas importadas desta semana</span></div>
       <div class="tw"><table><thead><tr><th>Evento</th><th>Data</th><th class="r">Vendas</th><th class="r">Montáveis</th><th class="r">Valor</th><th></th></tr></thead>
       <tbody>${docs.map(e=>{
         const val=(e.vendas||[]).reduce((a,v)=>a+(v.valor_total||0),0);
-        return `<tr><td class="w6">${e.nome_evento||"(evento)"}</td><td class="mn">${fmtData(e.data_evento)}</td>
+        return `<tr><td class="w6">${e.nome_evento||"(vendas)"}</td><td class="mn">${fmtData(e.data_evento)}</td>
           <td class="r">${(e.vendas||[]).length}</td><td class="r">${(e.montaveis||[]).length}</td><td class="r mn">${R(val)}</td>
-          <td><button class="bi" onclick="softDel('eventos_zig','${e.id}')">✕</button></td></tr>`;
+          <td><button class="bi" onclick="softDel('vendas_zig','${e.id}')">✕</button></td></tr>`;
       }).join("")}</tbody></table></div></div>`;
   }
   return html;
 }
 
-function importEventoZigFile(input){
+function importVendasZigFile(input){
   const file=input.files&&input.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=ev=>{
@@ -2155,7 +2155,7 @@ function importEventoZigFile(input){
       for(const n of wb.SheetNames.filter(n=>N(n).includes("vendid")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseZigVendas(m).erro){ mv=m; break; } }
       for(const n of wb.SheetNames.filter(n=>N(n).includes("montav")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseZigMontaveis(m).erro){ mm=m; break; } }
       if(!mv){ toast("Não encontrei a aba de vendas (SKU/Nome/Quantidade).","err","Import"); return; }
-      eventoZigImport={ fileName:file.name, data:Domain.extrairDataZig(mv),
+      vendasZigImport={ fileName:file.name, data:Domain.extrairDataZig(mv),
         vendas:Domain.parseZigVendas(mv).itens, montaveis: mm?Domain.parseZigMontaveis(mm).itens:[] };
       renderConciliacao();
     }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
@@ -2163,20 +2163,20 @@ function importEventoZigFile(input){
   reader.readAsArrayBuffer(file);
 }
 
-async function salvarEventoZig(){
+async function salvarVendasZig(){
   const sel=S.concilSemanaSel;
-  if(!eventoZigImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
-  const data=sv("ezig-data")||eventoZigImport.data||new Date().toISOString().slice(0,10);
-  const nome=sv("ezig-nome").trim()||("Evento "+fmtData(data));
-  const nVendas=eventoZigImport.vendas.length, nMont=eventoZigImport.montaveis.length;
+  if(!vendasZigImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
+  const data=sv("ezig-data")||vendasZigImport.data||new Date().toISOString().slice(0,10);
+  const nome=sv("ezig-nome").trim()||("Vendas "+fmtData(data));
+  const nVendas=vendasZigImport.vendas.length, nMont=vendasZigImport.montaveis.length;
   // Reusa o doc do mesmo (semana, data) em vez de duplicar ao reimportar.
-  const existente=S.eventos_zig.find(e=>e.semana_id===sel && e.data_evento===data);
-  const ok=await FS.save("eventos_zig",{
+  const existente=S.vendas_zig.find(e=>e.semana_id===sel && e.data_evento===data);
+  const ok=await FS.save("vendas_zig",{
     id: existente?existente.id:null, semana_id:sel, data_evento:data, nome_evento:nome, mes:mesDeData(data),
-    vendas:eventoZigImport.vendas, montaveis:eventoZigImport.montaveis
+    vendas:vendasZigImport.vendas, montaveis:vendasZigImport.montaveis
   });
   if(!ok) return;
-  eventoZigImport=null; renderConciliacao();
+  vendasZigImport=null; renderConciliacao();
   toast(`${nome}: ${nVendas} vendas, ${nMont} montáveis salvos.`,"ok","Evento importado");
 }
 
@@ -2244,7 +2244,7 @@ function salvarMapa(){
 
 function concilMapaHTML(){
   const skusVistos={};
-  S.eventos_zig.forEach(e=>(e.vendas||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.nome||""; }));
+  S.vendas_zig.forEach(e=>(e.vendas||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.nome||""; }));
   const mapados=new Set(S.mapeamento_zig.map(m=>m.sku_zig));
   const naoMap=Object.entries(skusVistos).filter(([sku])=>!mapados.has(sku)).map(([sku,nome])=>({sku,nome}));
   const maps=S.mapeamento_zig.slice().sort((a,b)=>(a.nome_zig||a.sku_zig||"").localeCompare(b.nome_zig||b.sku_zig||""));
@@ -2257,7 +2257,7 @@ function concilMapaHTML(){
         <td class="mn">${s.sku}</td><td class="w6">${s.nome}</td>
         <td class="r"><button class="btn bp bsm" data-n="${(s.nome||"").replace(/"/g,"&quot;")}" onclick="novoMapa('${s.sku}',this.dataset.n)">Mapear</button></td>
       </tr>`).join("")}</tbody></table></div>
-    </div>`:(S.eventos_zig.length?`<div class="ok-strip">Todos os SKUs dos eventos importados estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe eventos (aba 🎟) para detectar SKUs a mapear.</div>`)}
+    </div>`:(S.vendas_zig.length?`<div class="ok-strip">Todos os SKUs das vendas importadas estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe vendas (aba 🎟) para detectar SKUs a mapear.</div>`)}
     <div class="box">
       <div class="bh"><span class="bt">${maps.length} mapeamento(s)</span><button class="btn bp bsm" onclick="novoMapa('','')">+ Novo</button></div>
       <div class="tw"><table>
@@ -2281,7 +2281,7 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","eventos_zig","mapeamento_zig"];
+  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig"];
   const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
@@ -2303,7 +2303,7 @@ function unbindData(){
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
   S.custos=[];S.inventarios=[];S.inventarios_mensais=[];
-  S.semanas_conciliacao=[];S.estoques=[];S.eventos_zig=[];S.mapeamento_zig=[];S._trash={};
+  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S._trash={};
 }
 
 function showLogin(){

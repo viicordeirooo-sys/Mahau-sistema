@@ -25,7 +25,7 @@ Vanilla-JS single-page app with a hand-rolled render loop. No framework, no reac
 
 These functions encode the business logic and require reading together:
 
-- `estoqueAtual(pid)` (via `Domain.estoqueIndex`) — stock in whole units = `estoque_inicial + compras`. **Event sales no longer deduct stock** (per-product event sales were removed in the events refactor); real stock/consumption is tracked via physical **inventory counts**. *(A planned Fase 3c rebases the theoretical stock on the latest physical count + purchases since it.)*
+- `estoqueAtual(pid)` (via `Domain.estoqueIndex`) — stock in whole units = **last physical count (weekly or monthly) + purchases since it**, compared by `createdAt` (server timestamp). Never-counted product → fallback `estoque_inicial + all purchases`. No dependency on sales. The weekly inventory uses this as "Teórico"; Desvio = Físico − Teórico = consumption + losses.
 - `calcEv(e)` (in `domain.js`) — per-night P&L, **no CMV**: `Bar Líquido = bar_bruto − caixinha`; `Receita Total Casa = Bar Líquido + entrada(porta) + caixinha×(pct_casa/100)`; `Resultado = Receita − custos diretos − rateio`. The staff tip share (`caixinha − caixinha casa`) is informational.
 - `cmvRealMensal()` + `Domain.valorInventario` — the **CMV is real and monthly** (not per-event): `Estoque Inicial(mês−1) + Compras(mês) − Estoque Final(mês)`, valued from the monthly inventory counts. Rendered by `blocoCmvReal()` in Fechamento and the CMV page.
 - `rateio()` — allocates monthly fixed costs (`custos`) across events: month total ÷ `config.datasNoMes`.

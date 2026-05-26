@@ -50,33 +50,37 @@ const Domain = {
     return `${y}-${String(m).padStart(2,"0")}`;
   },
 
-  // Índice de movimentação de estoque construído em UMA passada.
-  // Retorna { [produtoId]: { entradasMl, consumoMl } }. Tudo em ml.
-  estoqueIndex(produtos, fichas, compras, vendas){
-    const cap={};      (produtos||[]).forEach(p=>{cap[p.id]=p.capacidade_ml||1;});
-    const fichaMap={}; (fichas||[]).forEach(f=>{fichaMap[f.id]=f;});
+  // Índice de estoque (em UNIDADES) baseado na ÚLTIMA contagem física + compras desde então.
+  //   contagens: [{ createdAtMs, contagens:{produtoId: qtd} }]  (semanal + mensal unidos)
+  //   compras:   [{ produto_id, qtd, createdAtMs }]
+  // Retorna { [pid]: { baseQty, baseMs, hasBase, comprasSince } }.
+  estoqueIndex(produtos, compras, contagens){
+    const base={}; // pid -> {qtd, ms} da contagem mais recente que inclui o produto
+    (contagens||[]).forEach(inv=>{
+      const ms=inv.createdAtMs||0;
+      Object.entries(inv.contagens||{}).forEach(([pid,qtd])=>{
+        if(!base[pid] || ms>base[pid].ms) base[pid]={qtd:parseFloat(qtd)||0, ms};
+      });
+    });
     const idx={};
-    const get=pid=>(idx[pid]||(idx[pid]={entradasMl:0,consumoMl:0}));
-    (compras||[]).forEach(c=>{ if(c.produto_id) get(c.produto_id).entradasMl+=(c.qtd||0)*(cap[c.produto_id]||1); });
-    (vendas||[]).forEach(v=>{
-      const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-      if(v.tipo==="produto"&&v.item_id){ get(v.item_id).consumoMl+=qtd*(cap[v.item_id]||1); }
-      else if(v.tipo==="ficha"){
-        const f=fichaMap[v.item_id];
-        if(f&&f.ingredientes) f.ingredientes.forEach(ing=>{
-          if(ing.produto_id) get(ing.produto_id).consumoMl+=qtd*(ing.quantidade_ml||0);
-        });
-      }
+    (produtos||[]).forEach(p=>{
+      const b=base[p.id];
+      idx[p.id]={baseQty:b?b.qtd:0, baseMs:b?b.ms:-1, hasBase:!!b, comprasSince:0};
+    });
+    (compras||[]).forEach(c=>{
+      const e=idx[c.produto_id]; if(!e) return;
+      // sem contagem ainda → conta todas as compras; com contagem → só as posteriores a ela
+      if(!e.hasBase || (c.createdAtMs||0) > e.baseMs) e.comprasSince += (c.qtd||0);
     });
     return idx;
   },
 
-  // Estoque atual (em unidades) de um produto, dado o índice pré-construído.
+  // Estoque atual (em unidades): última contagem física + compras desde então.
+  // Produto nunca contado → fallback estoque_inicial + todas as compras.
   estoqueAtualFrom(produto, idx){
     if(!produto) return 0;
-    const cap=produto.capacidade_ml||1;
-    const agg=(idx&&idx[produto.id])||{entradasMl:0,consumoMl:0};
-    return ((produto.estoque_inicial||0)*cap + agg.entradasMl - agg.consumoMl)/cap;
+    const e=(idx&&idx[produto.id])||{baseQty:0,hasBase:false,comprasSince:0};
+    return (e.hasBase ? e.baseQty : (produto.estoque_inicial||0)) + e.comprasSince;
   },
 
   // Custo (CMV unitário) de uma ficha, somando ingredientes (R$/ml × ml).

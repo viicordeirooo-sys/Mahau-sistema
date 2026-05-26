@@ -459,11 +459,18 @@ function navMes(delta){
 }
 
 // ── CALCS (wrappers finos sobre domain.js — a lógica pura e testável vive lá) ──
-// O índice de estoque é memoizado aqui (camada de app) e invalidado em bindData
-// (_estoqueIdx=null) quando produtos/fichas/compras mudam. Consumo por vendas foi
-// removido na Fase 3b; a baixa por contagem física entra na Fase 3c.
+// O índice de estoque é memoizado aqui e invalidado em bindData (_estoqueIdx=null)
+// quando produtos/compras/inventarios/inventarios_mensais mudam.
+// Estoque = última contagem física (semanal ou mensal) + compras desde então,
+// comparando por createdAt (timestamp do servidor).
 let _estoqueIdx=null;
-function estoqueIndex(){ return _estoqueIdx || (_estoqueIdx = Domain.estoqueIndex(S.produtos,S.fichas,S.compras,[])); }
+function tsMs(t){ return t && typeof t.toMillis==="function" ? t.toMillis() : (t&&t.seconds?t.seconds*1000:0); }
+function estoqueIndex(){
+  if(_estoqueIdx) return _estoqueIdx;
+  const contagens=[...S.inventarios,...S.inventarios_mensais].map(i=>({createdAtMs:tsMs(i.createdAt),contagens:i.contagens||{}}));
+  const compras=S.compras.map(c=>({produto_id:c.produto_id,qtd:c.qtd||0,createdAtMs:tsMs(c.createdAt)}));
+  return (_estoqueIdx = Domain.estoqueIndex(S.produtos, compras, contagens));
+}
 function estoqueAtual(pid){ return Domain.estoqueAtualFrom(S.produtos.find(x=>x.id===pid), estoqueIndex()); }
 function calcEv(e){ return Domain.calcEv(e, rateio()); }
 
@@ -1377,7 +1384,7 @@ function renderInventario(){
   const historico=S.inventarios.filter(i=>!S.mesSel||i.mes===S.mesSel)
     .sort((a,b)=>(b.mes||"").localeCompare(a.mes||"")||(b.data||"").localeCompare(a.data||""));
 
-  let rows=S.produtos.filter(p=>p.capacidade_ml&&p.preco_compra)
+  let rows=S.produtos.filter(p=>p.preco_compra>0)
     .sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.nome.localeCompare(b.nome));
 
   set("p-inv", pills+`
@@ -1390,14 +1397,14 @@ function renderInventario(){
         <div class="fi"><label>Semana</label><select id="inv-sem" onchange="invSem=this.value">
           ${semOpts.map(s=>`<option${invSem===s?" selected":""}>${s}</option>`).join("")}
         </select></div>
-        <div class="fi"><label>Data da Contagem</label><input id="inv-data" value="${invData}" placeholder="dd/mm" oninput="invData=this.value"></div>
+        <div class="fi"><label>Data da Contagem</label><input id="inv-data" type="date" value="${invData}" oninput="invData=this.value"></div>
         <div class="fi" style="justify-content:flex-end;flex-direction:row;align-items:flex-end">
           <button class="btn bp" onclick="salvarInventario()">💾 Salvar Inventário</button>
         </div>
       </div>
       <div style="font-size:11px;color:#484f58;margin-bottom:10px">
-        Preencha a <strong>contagem física</strong> (un). Deixe em branco para produtos não contados.
-        <span style="float:right">Mostrando apenas produtos com custo e capacidade cadastrados (${rows.length})</span>
+        Contagem física (un). <strong>Teórico</strong> = última contagem + compras desde então; <strong>Desvio</strong> = Físico − Teórico (consumo + quebras/furtos).
+        <span style="float:right">Produtos com custo (${rows.length})</span>
       </div>
       <div class="tw"><table>
         <thead><tr>
@@ -1432,20 +1439,15 @@ function renderInventario(){
     ${historico.length?`<div class="box">
       <div class="bh"><span class="bt">Histórico de Inventários</span></div>
       <div class="tw"><table>
-        <thead><tr><th>Data</th><th>Semana</th><th class="r">Itens contados</th><th class="r">Desvio total R$</th><th class="r">Status</th></tr></thead>
+        <thead><tr><th>Data</th><th>Semana</th><th class="r">Itens contados</th><th class="r">Valor contado R$</th></tr></thead>
         <tbody>${historico.map(inv=>{
           const n=Object.keys(inv.contagens||{}).length;
-          let dTot=0;
-          Object.entries(inv.contagens||{}).forEach(([pid,fis])=>{
-            const p=S.produtos.find(x=>x.id===pid);
-            if(p&&p.preco_compra) dTot+=(parseFloat(fis)-estoqueAtual(pid))*(p.preco_compra||0);
-          });
+          const val=Domain.valorInventario(inv.contagens, S.produtos);
           return`<tr>
-            <td class="mn">${inv.data||""}</td>
+            <td class="mn">${fmtData(inv.data)}</td>
             <td>${inv.semana||""}</td>
             <td class="r">${n}</td>
-            <td class="r mn ${dTot<-50?"inv-bad":dTot>50?"inv-ok":"inv-warn"}">${Rf(dTot)}</td>
-            <td class="r">${chip(Math.abs(dTot)<100?"✓ OK":"⚠ Desvio",Math.abs(dTot)<100?"#22c55e":"#ef4444")}</td>
+            <td class="r mn">${R(val)}</td>
           </tr>`;
         }).join("")}
         </tbody>
@@ -1468,7 +1470,7 @@ function updateInvRow(input,pid,teo,custo){
 }
 
 async function salvarInventario(){
-  const data=el("inv-data")?.value||new Date().toLocaleDateString("pt-BR");
+  const data=el("inv-data")?.value||new Date().toISOString().slice(0,10);
   const contagens={};
   Object.entries(invContagens).forEach(([k,v])=>{if(v!==undefined)contagens[k]=parseFloat(v)||0;});
   if(!validar([
@@ -1884,7 +1886,7 @@ function bindData(){
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
   const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais"];
-  const STOCK=new Set(["produtos","fichas","compras"]);
+  const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
       S[col]=d.filter(x=>!x.deletedAt);

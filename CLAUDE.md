@@ -14,21 +14,21 @@ Mahau is a financial management system (in Brazilian Portuguese) for a bar / eve
 
 Vanilla-JS single-page app with a hand-rolled render loop. No framework, no reactivity library — UI is rebuilt by assigning HTML strings to `innerHTML`.
 
-- **Global state `S`** (`index.html:272`) holds every collection as an array (`produtos`, `fichas`, `compras`, `eventos`, `evento_vendas`, `custos`, `inventarios`), plus `config`, the current `page`, and `mesSel` (selected month filter).
+- **Global state `S`** (`index.html:272`) holds every collection as an array (`produtos`, `fichas`, `compras`, `eventos`, `custos`, `inventarios`, `inventarios_mensais`), plus `config`, the current `page`, `mesSel` (selected month filter), and `_trash` (soft-deleted docs).
 - **`FS`** (`index.html:219`) is the thin Firestore wrapper: `save`, `del`, `setDoc`, `listen`. `save` auto-assigns the Firestore doc id back into the document's `id` field.
 - **`init()`** (`index.html:2135`) registers an `onSnapshot` listener per collection. Every snapshot overwrites the matching `S.*` array and calls `render()` — so the UI is always driven by live Firestore data; **never mutate `S.*` arrays directly and expect persistence**, always go through `FS`.
 - **`render()`** (`index.html:467`) is the central dispatcher: it redraws the month bar and sidebar, then calls the one `render<Page>()` function for `S.page`. Each page is a `renderX()` function that builds a string and `set()`s it into a `<div id="p-...">`. Navigation is `go(id)` driven by the `PAGES` array (`index.html:426`).
-- **Event handlers are inline `onclick=` attributes** calling global functions (e.g. `saveProd()`, `addVenda(eid)`, `FS.del(...)`). Because the DOM is regenerated on every render, there are no persistent listeners to manage — add behavior as inline handlers + a global function.
-- **Month filtering:** most views filter by `S.mesSel` via `noMes(dateStr)` (wrapper of `Domain.noMes`). `null` means "all months". Period-scoped docs (`eventos`, `compras`, `evento_vendas`, `custos`, `inventarios`) carry a denormalized `mes` (`"YYYY-MM"`); filter call sites pass `x.mes || x.data` so new docs filter by `mes` and legacy `"dd/mm"` docs fall back to the old behavior (visible only in "all months"). Dates are stored ISO (`YYYY-MM-DD`, `type="date"` inputs) and displayed via `fmtData` (→ `dd/mm/aaaa`; legacy strings pass through). When adding aggregations, respect this filter.
+- **Event handlers are inline `onclick=` attributes** calling global functions (e.g. `saveProd()`, `saveEv()`, `FS.del(...)`). Because the DOM is regenerated on every render, there are no persistent listeners to manage — add behavior as inline handlers + a global function.
+- **Month filtering:** most views filter by `S.mesSel` via `noMes(dateStr)` (wrapper of `Domain.noMes`). `null` means "all months". Period-scoped docs (`eventos`, `compras`, `custos`, `inventarios`, `inventarios_mensais`) carry a denormalized `mes` (`"YYYY-MM"`); filter call sites pass `x.mes || x.data` so new docs filter by `mes` and legacy `"dd/mm"` docs fall back to the old behavior (visible only in "all months"). Dates are stored ISO (`YYYY-MM-DD`, `type="date"` inputs) and displayed via `fmtData` (→ `dd/mm/aaaa`; legacy strings pass through). When adding aggregations, respect this filter.
 
 ## Core domain calculations (`index.html:358-423`)
 
 These functions encode the business logic and require reading together:
 
-- `estoqueAtual(pid)` — current stock of a product, in whole units. Starts from `estoque_inicial`, adds purchases, and subtracts consumption from event sales. **Recipe-aware:** a `ficha` (recipe) sale deducts each ingredient's `quantidade_ml` from the underlying products; a direct `produto` sale deducts full units. All math is done in **ml internally** then divided by `capacidade_ml`.
-- `cmvEvento(eid)` — returns `{cmv, rec_bar}` (cost of goods sold + bar revenue) for an event, expanding recipes to ingredient cost.
-- `calcEv(e)` — full per-event P&L: `receita = bar + entrada`, then subtracts CMV, direct event costs (`dj + seguranca + staff + outros`), and `rateio()`. Returns margins/percentages used across Dashboard, CMV, and Fechamento pages.
-- `rateio()` — allocates monthly fixed costs (`custos`) across events by dividing the month's total by `config.datasNoMes` (number of event days/month, settable in the UI).
+- `estoqueAtual(pid)` (via `Domain.estoqueIndex`) — stock in whole units = `estoque_inicial + compras`. **Event sales no longer deduct stock** (per-product event sales were removed in the events refactor); real stock/consumption is tracked via physical **inventory counts**. *(A planned Fase 3c rebases the theoretical stock on the latest physical count + purchases since it.)*
+- `calcEv(e)` (in `domain.js`) — per-night P&L, **no CMV**: `Bar Líquido = bar_bruto − caixinha`; `Receita Total Casa = Bar Líquido + entrada(porta) + caixinha×(pct_casa/100)`; `Resultado = Receita − custos diretos − rateio`. The staff tip share (`caixinha − caixinha casa`) is informational.
+- `cmvRealMensal()` + `Domain.valorInventario` — the **CMV is real and monthly** (not per-event): `Estoque Inicial(mês−1) + Compras(mês) − Estoque Final(mês)`, valued from the monthly inventory counts. Rendered by `blocoCmvReal()` in Fechamento and the CMV page.
+- `rateio()` — allocates monthly fixed costs (`custos`) across events: month total ÷ `config.datasNoMes`.
 
 ## Firestore data model
 
@@ -37,20 +37,21 @@ Field names are set in the `save*` functions; match them exactly when adding fie
 - **produtos** (`saveProd` :639): `nome, categoria, unidade, capacidade_ml, preco_compra, preco_venda, estoque_min, estoque_inicial`
 - **fichas** (recipes, `saveFicha` :840): `nome, categoria, preco_venda, ingredientes:[{produto_id, quantidade_ml}]`
 - **compras** (purchases, `saveCp` :1054): `produto_id, qtd, total, data`
-- **eventos** (`saveEv` :1278): `data, nome, publico, vips, entrada, dj, seguranca, staff, outros` (+ `bar`, `origem` when imported)
-- **evento_vendas** (event sales :1271): `evento_id, tipo` (`"produto"|"ficha"|"manual"`)`, item_id, qtd_vendida, qtd_cortesia, valor_unit, valor_total` (+ `nome_zigpay, cat_zigpay` when imported)
-- **custos** (monthly fixed costs :1356): `nome, valor, mes` (`mes` = `"YYYY-MM"`)
-- **inventarios** (weekly counts :1567): `semana, data, contagens`
+- **eventos** (`saveEv`): `data, mes, nome, publico, vips, bar_bruto, entrada` (porta/cover)`, caixinha, pct_casa` (% da caixinha que fica com a casa)`, dj, seguranca, staff, outros`
+- **custos** (monthly fixed costs, `addCusto`): `nome, valor, mes` (`mes` = `"YYYY-MM"`)
+- **inventarios** (weekly counts, `salvarInventario`): `semana, mes, data, contagens` (`contagens` = `{produtoId: qtdFísica}`) — detecção de desvio/quebra
+- **inventarios_mensais** (`salvarInventarioMensal`): `mes, data, contagens` — base do CMV Real (uma contagem por mês)
+- *(Removidos no refactor de Eventos: `evento_vendas`, vendas por produto, import ZigPay.)*
 - **config/settings** (singleton doc): `datasNoMes`
 
-## ZigPay import (`index.html:1936-2042`)
+## Excel export
 
-The app imports the venue's POS (ZigPay) Excel export to auto-create an event and its sales. `parseZigFile` reads the sheet with SheetJS and buckets each line by category: `ZIG_BAR_CATS` → bar revenue, `ZIG_ENTRADA_CATS` → service fees (entrada), `ZIG_SKIP` keywords → discarded. Imported sale items are **fuzzy-matched by name** to existing `produtos`/`fichas` (falling back to `tipo:"manual"` when unmatched). When changing product names or categories, be aware this matching is substring-based and case-insensitive.
+`exportarExcel()` builds a multi-sheet `.xlsx` (Eventos, Compras, Estoque) for the selected period, from the "⬇ Exportar Excel" button on Fechamento.
 
-`exportarExcel()` (:1676) does the reverse — builds a multi-sheet `.xlsx` (Eventos, CMV Produtos, Compras, Estoque) for the selected period.
+*(The former ZigPay POS import — `parseZigFile`/`importZigPay`/`ZIG_*` — was removed in the events refactor, since events no longer track per-product sales.)*
 
 ## Conventions
 
 - **Deletes are soft by default:** the ✕ buttons call `softDel(col,id)` (simple confirm → `FS.del`, which sets `deletedAt`). Listeners in `bindData` filter `deletedAt` out of `S[col]` and into `S._trash[col]`, so all calc/render automatically excludes soft-deleted docs. The **Lixeira** page (`renderLixeira`) restores (`FS.restore`, clears `deletedAt`) or permanently deletes. **Permanent deletion** (`FS.hardDel`) is the only thing still gated by the typed-`LIMPAR` modal `confirmarLimpar(cb)` (used in the Lixeira).
 - **Currency/percent formatting** helpers: `R` (BRL, no decimals), `Rf` (BRL with decimals), `P` (percent). Read with `nv(id)` (number) / `sv(id)` (string) and write with `set(id, html)`.
-- **Seeding:** `seedCombos()` (button on the Fichas page) generates the combo recipe `fichas`. The former product seed (`ZIGPAY_PRODUTOS` array + `seedIfEmpty()`) was removed — products are now created manually (`+ Novo Produto`) or matched via the ZigPay *sales* import (`importZigPay`, a separate feature).
+- **Seeding:** `seedCombos()` (button on the Fichas page) generates the combo recipe `fichas`. Products are created manually (`+ Novo Produto` / Editar em Massa). The old product seed and the ZigPay sales import were both removed.

@@ -30,7 +30,7 @@ const Domain = {
   },
 
   // Fonte única dos campos de criação de um documento. Usada pelo FS.save E pelos
-  // writers diretos (importZigPay, seeds). ts = firebase serverTimestamp().
+  // writers diretos (seeds). ts = firebase serverTimestamp().
   camposCriacao(data, ts){
     return {...(data||{}), orgId:(data&&data.orgId)||"default", createdAt:ts, updatedAt:ts};
   },
@@ -90,37 +90,6 @@ const Domain = {
     return c;
   },
 
-  // CMV e receita de bar de um evento (expande fichas em ingredientes).
-  // Vendas "manual" (ZigPay não mapeado): receita = valor_total do POS, CMV = 0.
-  cmvEvento(eid, vendas, produtos, fichas){
-    let cmv=0, rec_bar=0;
-    (vendas||[]).filter(v=>v.evento_id===eid).forEach(v=>{
-      const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-      const qv=v.qtd_vendida||0;
-      if(v.tipo==="produto"){
-        const p=(produtos||[]).find(x=>x.id===v.item_id);
-        if(p){ cmv+=qtd*(p.preco_compra||0); rec_bar+=qv*(p.preco_venda||0); }
-      }
-      if(v.tipo==="ficha"){
-        const f=(fichas||[]).find(x=>x.id===v.item_id);
-        if(f){
-          rec_bar+=qv*(f.preco_venda||0);
-          if(f.ingredientes) f.ingredientes.forEach(ing=>{
-            const p=(produtos||[]).find(x=>x.id===ing.produto_id);
-            if(p&&p.preco_compra&&p.capacidade_ml) cmv+=qtd*(ing.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
-          });
-        }
-      }
-      if(v.tipo==="manual"){ rec_bar += (v.valor_total||0); }
-    });
-    return {cmv, rec_bar};
-  },
-
-  // Nº de vendas importadas ainda não mapeadas a um produto/ficha (CMV pendente).
-  qtdNaoMapeadas(eid, vendas){
-    return (vendas||[]).filter(v=>v.evento_id===eid && v.tipo==="manual").length;
-  },
-
   // Soma dos custos fixos do mês selecionado (ou de todos, se mesSel vazio).
   totalFixo(custos, mesSel){
     return (custos||[]).filter(c=>!mesSel||(c.mes&&c.mes===mesSel)).reduce((s,c)=>s+(c.valor||0),0);
@@ -148,9 +117,7 @@ const Domain = {
     const resultado=receitaCasa-custosDiretos-rat;
     return {
       barBruto, caixinha, caixinhaCasa, caixinhaFunc, barLiquido, porta,
-      receitaCasa, custosDiretos, rateio:rat, resultado, mg:receitaCasa?resultado/receitaCasa:0,
-      // compat legado p/ consumidores ainda não migrados (removido na Fase 3b):
-      rec:receitaCasa, res:resultado, rec_bar:barLiquido, dir:custosDiretos, cmv:0, cmvP:0
+      receitaCasa, custosDiretos, rateio:rat, resultado, mg:receitaCasa?resultado/receitaCasa:0
     };
   },
 

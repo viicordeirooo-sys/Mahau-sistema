@@ -376,7 +376,7 @@ function confirmarLimpar(cb) {
 const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
-  evento_vendas:[],custos:[],inventarios:[],inventarios_mensais:[],config:{datasNoMes:4},
+  custos:[],inventarios:[],inventarios_mensais:[],config:{datasNoMes:4},
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null  // null = todos os meses
 };
@@ -460,13 +460,11 @@ function navMes(delta){
 
 // ── CALCS (wrappers finos sobre domain.js — a lógica pura e testável vive lá) ──
 // O índice de estoque é memoizado aqui (camada de app) e invalidado em bindData
-// (_estoqueIdx=null) quando produtos/fichas/compras/evento_vendas mudam.
+// (_estoqueIdx=null) quando produtos/fichas/compras mudam. Consumo por vendas foi
+// removido na Fase 3b; a baixa por contagem física entra na Fase 3c.
 let _estoqueIdx=null;
-function estoqueIndex(){ return _estoqueIdx || (_estoqueIdx = Domain.estoqueIndex(S.produtos,S.fichas,S.compras,S.evento_vendas)); }
+function estoqueIndex(){ return _estoqueIdx || (_estoqueIdx = Domain.estoqueIndex(S.produtos,S.fichas,S.compras,[])); }
 function estoqueAtual(pid){ return Domain.estoqueAtualFrom(S.produtos.find(x=>x.id===pid), estoqueIndex()); }
-
-function cmvEvento(eid){ return Domain.cmvEvento(eid, S.evento_vendas, S.produtos, S.fichas); }
-function qtdNaoMapeadas(eid){ return Domain.qtdNaoMapeadas(eid, S.evento_vendas); }
 function calcEv(e){ return Domain.calcEv(e, rateio()); }
 
 function alertasEstoque() {
@@ -1200,8 +1198,8 @@ function renderEventos(){
           <div style="font-size:10px;color:#484f58;margin-top:2px">${e.publico||0} pessoas · ${e.vips||0} VIPs</div>
         </div>
         <div style="text-align:right">
-          <div style="font-family:monospace;font-weight:700;font-size:15px">${R(e.rec)}</div>
-          <div style="font-family:monospace;font-size:12px;color:${e.res>0?"#22c55e":"#ef4444"};margin-top:2px">${R(e.res)}</div>
+          <div style="font-family:monospace;font-weight:700;font-size:15px">${R(e.receitaCasa)}</div>
+          <div style="font-family:monospace;font-size:12px;color:${e.resultado>0?"#22c55e":"#ef4444"};margin-top:2px">${R(e.resultado)}</div>
         </div>
       </div>
       <div class="ech">
@@ -1221,38 +1219,7 @@ function renderEventos(){
     <div class="pg-h">
       <div><div class="eyebrow">GESTÃO DE NOITES</div><div class="pg-t">Eventos</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn bg_" onclick="el('zig-import-box').classList.toggle('hidden')">⬆ Importar ZigPay</button>
         <button class="btn bp" onclick="evForm={...EV0};renderEventos()">+ Novo Evento</button>
-      </div>
-    </div>
-    <div id="zig-import-box" class="hidden fb" style="margin-bottom:12px">
-      <div class="ft">Importar Relatório ZigPay <button class="bi" onclick="el('zig-import-box').classList.add('hidden')">✕</button></div>
-      <div style="font-size:11px;color:#484f58;margin-bottom:12px">
-        Exporte o relatório <strong>Total de produtos vendidos</strong> do ZigPay e importe aqui.<br>
-        Bar + Alimentos → Receita Bar · Serviços/Taxa → Entrada · Rider/Souvenir → ignorados
-      </div>
-      <div class="fg g2">
-        <div class="fi"><label>Data do Evento</label><input id="zig-data" type="date"></div>
-        <div class="fi"><label>Nome do Evento</label><input id="zig-nome" placeholder="Sábado Premium"></div>
-      </div>
-      <div class="fg g4">
-        <div class="fi"><label>Público Total</label><input id="zig-pub" type="number" placeholder="0"></div>
-        <div class="fi"><label>VIPs</label><input id="zig-vips" type="number" placeholder="0"></div>
-        <div class="fi"><label>DJ / Atração</label><input id="zig-dj" type="number" placeholder="0"></div>
-        <div class="fi"><label>Segurança</label><input id="zig-seg" type="number" placeholder="0"></div>
-      </div>
-      <div class="fg g2">
-        <div class="fi"><label>Staff</label><input id="zig-sta" type="number" placeholder="0"></div>
-        <div class="fi"><label>Outros custos diretos</label><input id="zig-out" type="number" placeholder="0"></div>
-      </div>
-      <div class="fi" style="margin-bottom:12px">
-        <label>Arquivo Excel do ZigPay</label>
-        <input type="file" id="zig-file" accept=".xlsx,.xls" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
-      </div>
-      <div id="zig-preview" style="font-size:11px;color:#484f58;margin-bottom:10px"></div>
-      <div style="display:flex;gap:8px">
-        <button class="btn bp" onclick="importZigPay()">Importar e Criar Evento</button>
-        <button class="btn bg_" onclick="el('zig-import-box').classList.add('hidden')">Cancelar</button>
       </div>
     </div>
     ${formHTML}
@@ -1288,118 +1255,6 @@ function renderDRE(e){
       <div class="dre-r"><span style="font-size:10px;color:#484f58">Repasse Funcionários (caixinha)</span>
       <span style="font-family:monospace;font-size:11px;color:#f59e0b">${R(c.caixinhaFunc)}</span></div>`:""}
   </div>`;
-}
-
-function renderVendasEvento(e){
-  const vendas=S.evento_vendas.filter(v=>v.evento_id===e.id);
-  const allItems=[
-    ...S.fichas.map(f=>({tipo:"ficha",id:f.id,nome:f.nome,cat:f.categoria,preco:f.preco_venda})),
-    ...S.produtos.map(p=>({tipo:"produto",id:p.id,nome:p.nome,cat:p.categoria,preco:p.preco_venda})),
-  ].sort((a,b)=>a.nome.localeCompare(b.nome));
-
-  return`<div class="box" style="margin-top:10px">
-    <div class="bh"><span class="bt">📋 Registro de Vendas — ${e.nome}</span>
-      <button class="btn bp bsm" onclick="addVenda('${e.id}')">+ Adicionar Item</button>
-    </div>
-    <div id="venda-form-${e.id}"></div>
-    ${qtdNaoMapeadas(e.id)?`<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">
-      ⚠ ${qtdNaoMapeadas(e.id)} item(ns) importado(s) sem correspondência. A <strong>receita já está contabilizada</strong> pelo valor do ZigPay, mas o <strong>CMV só entra após mapear</strong> cada item a um produto/ficha (coluna da direita).
-    </div>`:""}
-    <div class="tw"><table>
-      <thead><tr><th>Item</th><th>Tipo</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">CMV</th><th class="r">Receita</th><th></th></tr></thead>
-      <tbody>${vendas.length?vendas.map(v=>{
-        if(v.tipo==="manual"){
-          return `<tr style="background:rgba(245,158,11,.06)">
-            <td class="w6" title="${(v.cat_zigpay||"").replace(/"/g,"")}">${v.nome_zigpay||"(sem nome)"} ${chip("não mapeado","#f59e0b")}</td>
-            <td>${chip("importado","#f59e0b")}</td>
-            <td class="r mn">${v.qtd_vendida||0}</td>
-            <td class="r mn mt">${v.qtd_cortesia||0}</td>
-            <td class="r mn mt" title="Custo desconhecido até mapear a um produto/ficha">—</td>
-            <td class="r mn">${Rf(v.valor_total||0)}</td>
-            <td style="white-space:nowrap">
-              <select class="ing-sel" style="width:118px;display:inline-block;padding:4px 6px;font-size:11px;vertical-align:middle" onchange="mapearVenda('${v.id}',this.value)">
-                <option value="">mapear…</option>
-                ${allItems.map(i=>`<option value="${i.tipo}::${i.id}">${i.nome}</option>`).join("")}
-              </select>
-              <button class="bi" onclick="softDel('evento_vendas','${v.id}')">✕</button>
-            </td>
-          </tr>`;
-        }
-        const item=v.tipo==="ficha"?S.fichas.find(x=>x.id===v.item_id):S.produtos.find(x=>x.id===v.item_id);
-        if(!item) return"";
-        const qtdT=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-        let cmvI=0,recI=0;
-        if(v.tipo==="produto"){
-          cmvI=qtdT*(item.preco_compra||0);
-          recI=(v.qtd_vendida||0)*(item.preco_venda||0);
-        } else {
-          cmvI=calcCustoFicha(item)*qtdT;
-          recI=(v.qtd_vendida||0)*(item.preco_venda||0);
-        }
-        return`<tr>
-          <td class="w6">${item.nome}</td>
-          <td>${chip(v.tipo==="ficha"?"drink":"produto",v.tipo==="ficha"?"#2563eb":"#8b5cf6")}</td>
-          <td class="r mn">${v.qtd_vendida||0}</td>
-          <td class="r mn" style="color:${(v.qtd_cortesia||0)>0?"#f59e0b":"#484f58"}">${v.qtd_cortesia||0}</td>
-          <td class="r mn">${Rf(cmvI)}</td>
-          <td class="r mn">${Rf(recI)}</td>
-          <td><button class="bi" onclick="softDel('evento_vendas','${v.id}')">✕</button></td>
-        </tr>`;
-      }).join(""):`<tr><td colspan="7" class="empty">Nenhuma venda registrada. Clique em "+ Adicionar Item".</td></tr>`}
-      </tbody>
-    </table></div>
-  </div>`;
-}
-
-// Mapeia uma venda importada (manual) a um produto/ficha: o CMV passa a ser
-// calculado e o estoque baixado. Mantém qtd/valores originais do ZigPay.
-function mapearVenda(vid, raw){
-  if(!raw) return;
-  const v=S.evento_vendas.find(x=>x.id===vid); if(!v) return;
-  const [tipo,item_id]=raw.split("::");
-  FS.save("evento_vendas",{...v, tipo, item_id});
-}
-
-function addVenda(eid){
-  const allItems=[
-    ...S.fichas.map(f=>({tipo:"ficha",id:f.id,nome:f.nome+"  (drink)"})),
-    ...S.produtos.map(p=>({tipo:"produto",id:p.id,nome:p.nome+"  (produto)"})),
-  ].sort((a,b)=>a.nome.localeCompare(b.nome));
-
-  const d=el("venda-form-"+eid); if(!d) return;
-  d.innerHTML=`<div class="fb" style="margin:10px">
-    <div class="ft">Adicionar Venda<button class="bi" onclick="el('venda-form-${eid}').innerHTML=''">✕</button></div>
-    <div class="fg g3">
-      <div class="fi"><label>Item</label><select id="vf-item">
-        <option value="">-- selecione --</option>
-        ${allItems.map(i=>`<option value="${i.tipo}::${i.id}">${i.nome}</option>`).join("")}
-      </select></div>
-      <div class="fi"><label>Qtd Vendida</label><input id="vf-vend" type="number" value="0"></div>
-      <div class="fi"><label>Qtd Cortesia</label><input id="vf-cort" type="number" value="0"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bp" onclick="saveVenda('${eid}')">Salvar</button>
-      <button class="btn bg_" onclick="el('venda-form-${eid}').innerHTML=''">Cancelar</button>
-    </div>
-  </div>`;
-}
-
-function saveVenda(eid){
-  const raw=sv("vf-item");
-  const [tipo,item_id]=(raw||"").split("::");
-  const qv=nv("vf-vend"), qc=nv("vf-cort");
-  if(!validar([
-    [raw, "Selecione um item."],
-    [qv>=0&&qc>=0, "Quantidades não podem ser negativas."],
-    [qv>0||qc>0, "Informe ao menos uma quantidade vendida ou cortesia."],
-  ])) return;
-  const ev=S.eventos.find(x=>x.id===eid);
-  FS.save("evento_vendas",{
-    id:null,evento_id:eid,tipo,item_id,
-    qtd_vendida:qv,qtd_cortesia:qc,
-    mes: ev ? (ev.mes||mesDeData(ev.data)) : "",
-  });
-  const d=el("venda-form-"+eid); if(d) d.innerHTML="";
 }
 
 function saveEv(){
@@ -1497,115 +1352,16 @@ function addCusto(){
 
 // ── CMV ─────────────────────────────────────────────────────────────────────
 function renderCMV(){
-  const calcs=S.eventos.filter(e=>noMes(e.mes||e.data)).map(e=>({...e,...calcEv(e)}));
-  const tRec=calcs.reduce((s,e)=>s+e.rec,0);
-  const tCmv=calcs.reduce((s,e)=>s+e.cmv,0);
-  const tCortesia=S.evento_vendas.reduce((s,v)=>{
-    const qc=v.qtd_cortesia||0; if(!qc) return s;
-    if(v.tipo==="produto"){const p=S.produtos.find(x=>x.id===v.item_id);return s+(p?qc*(p.preco_compra||0):0);}
-    if(v.tipo==="ficha"){const f=S.fichas.find(x=>x.id===v.item_id);return s+(f?qc*calcCustoFicha(f):0);}
-    return s;
-  },0);
-
-  const evIdsMes=new Set(calcs.map(e=>e.id));
-  // CMV por categoria
-  const porCat={};
-  S.evento_vendas.filter(v=>evIdsMes.has(v.evento_id)).forEach(v=>{
-    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0),qv=v.qtd_vendida||0;
-    let cat="Outros",cmvI=0,recI=0;
-    if(v.tipo==="produto"){
-      const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
-      cat=p.categoria||"Outros";cmvI=qtd*(p.preco_compra||0);recI=qv*(p.preco_venda||0);
-    } else {
-      const f=S.fichas.find(x=>x.id===v.item_id);if(!f)return;
-      cat=f.categoria||"Drinks";cmvI=calcCustoFicha(f)*qtd;recI=qv*(f.preco_venda||0);
-    }
-    if(!porCat[cat]) porCat[cat]={cat,cmv:0,receita:0};
-    porCat[cat].cmv+=cmvI; porCat[cat].receita+=recI;
-  });
-  const catRows=Object.values(porCat).sort((a,b)=>b.cmv-a.cmv);
-
-  // CMV por produto (aggregated) — top 15
-  const porProd={};
-  S.evento_vendas.forEach(v=>{
-    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0);
-    const qv=v.qtd_vendida||0,qc=v.qtd_cortesia||0;
-    if(v.tipo==="produto"){
-      const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
-      if(!porProd[p.id]) porProd[p.id]={nome:p.nome,cat:p.categoria,cmv:0,vendido:0,cortesia:0,receita:0};
-      porProd[p.id].cmv+=qtd*(p.preco_compra||0);
-      porProd[p.id].vendido+=qv;porProd[p.id].cortesia+=qc;
-      porProd[p.id].receita+=qv*(p.preco_venda||0);
-    }
-    if(v.tipo==="ficha"){
-      const f=S.fichas.find(x=>x.id===v.item_id);if(!f||!f.ingredientes)return;
-      f.ingredientes.forEach(ing=>{
-        const p=S.produtos.find(x=>x.id===ing.produto_id);
-        if(!p||!p.preco_compra||!p.capacidade_ml)return;
-        const custo=qtd*(ing.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
-        if(!porProd[p.id]) porProd[p.id]={nome:p.nome,cat:p.categoria,cmv:0,vendido:0,cortesia:0,receita:0,via_ficha:true};
-        porProd[p.id].cmv+=custo;
-      });
-      if(!porProd["ficha_"+f.id]) porProd["ficha_"+f.id]={nome:f.nome+" (drink)",cat:f.categoria,cmv:0,vendido:0,cortesia:0,receita:0,is_ficha:true};
-      porProd["ficha_"+f.id].vendido+=qv;porProd["ficha_"+f.id].cortesia+=qc;
-      porProd["ficha_"+f.id].receita+=qv*(f.preco_venda||0);
-      porProd["ficha_"+f.id].cmv+=calcCustoFicha(f)*qtd;
-    }
-  });
-  const prodRows=Object.values(porProd).sort((a,b)=>b.cmv-a.cmv);
-  const top10=prodRows.slice(0,15);
-
   set("p-cmv",`
     <div class="eyebrow">ANÁLISE DE CUSTO</div>
-    <div class="pg-t">CMV Detalhado</div>
-    <div class="kpis">
-      ${kpi("CMV Total",R(tCmv),"período completo","#e6edf3","#2563eb")}
-      ${kpi("CMV%",tRec?P(tCmv/tRec):"—",tRec?(tCmv/tRec>0.28?"⚠ Acima meta":"✓ Dentro meta"):"",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e")}
-      ${kpi("Custo Cortesias",R(tCortesia),"impacto no CMV","#f59e0b","#f59e0b")}
-      ${kpi("Rec. Bar",R(calcs.reduce((s,e)=>s+e.rec_bar,0)),"sem cobertura","#e6edf3","#8b5cf6")}
+    <div class="pg-t">CMV Real</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:12px">
+      O CMV é apurado pelo <strong>inventário</strong>: Estoque Inicial + Compras − Estoque Final.
+      Mantenha as contagens mensais em dia (aba <strong>Mensal</strong> do Inventário) e selecione um mês no topo.
     </div>
-
-    ${blocoCmvReal(tCmv)}
-
-    ${catRows.length?`<div class="box">
-      <div class="bh"><span class="bt">CMV por Categoria</span></div>
-      <div class="tw"><table>
-        <thead><tr><th>Categoria</th><th class="r">CMV R$</th><th class="r">CMV%</th><th class="r">Receita</th><th class="r">Participação</th></tr></thead>
-        <tbody>${catRows.map(r=>`<tr>
-          <td class="w6">${r.cat}</td>
-          <td class="r mn w6">${Rf(r.cmv)}</td>
-          <td class="r">${r.receita?chip(P(r.cmv/r.receita),r.cmv/r.receita>0.35?"#ef4444":r.cmv/r.receita>0.25?"#f59e0b":"#22c55e"):"—"}</td>
-          <td class="r mn">${r.receita?R(r.receita):"—"}</td>
-          <td class="r">
-            <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">
-              <div class="prog" style="width:60px"><div class="pf" style="width:${tCmv?(r.cmv/tCmv*100).toFixed(1):0}%;background:#2563eb"></div></div>
-              <span style="font-family:monospace;font-size:10px;color:#484f58">${tCmv?P(r.cmv/tCmv):"—"}</span>
-            </div>
-          </td>
-        </tr>`).join("")}
-        </tbody>
-      </table></div>
-    </div>`:""}
-
-    <div class="box">
-      <div class="bh"><span class="bt">Top ${top10.length} por CMV</span></div>
-      <div class="tw"><table>
-        <thead><tr><th>Item</th><th>Categoria</th><th class="r">Vendido</th><th class="r">Cortesia</th><th class="r">Receita</th><th class="r">CMV R$</th><th class="r">CMV%</th></tr></thead>
-        <tbody>${top10.length?top10.map(r=>`<tr>
-          <td class="w6">${r.nome}</td>
-          <td class="mt">${r.cat||""}</td>
-          <td class="r mn">${r.vendido||"—"}</td>
-          <td class="r mn" style="color:${(r.cortesia||0)>0?"#f59e0b":"#484f58"}">${r.cortesia||0}</td>
-          <td class="r mn">${r.receita?R(r.receita):"—"}</td>
-          <td class="r mn w6">${Rf(r.cmv)}</td>
-          <td class="r">${r.receita?chip(P(r.cmv/r.receita),r.cmv/r.receita>0.35?"#ef4444":r.cmv/r.receita>0.25?"#f59e0b":"#22c55e"):"—"}</td>
-        </tr>`).join(""):`<tr><td colspan="7" class="empty">Nenhuma venda registrada ainda.</td></tr>`}
-        </tbody>
-      </table></div>
-    </div>
+    ${blocoCmvReal(null)}
   `);
 }
-
 
 // ── INVENTÁRIO SEMANAL ────────────────────────────────────────────────────────
 let invSem="S1",invData="",invSaving=false,invContagens={};
@@ -1963,26 +1719,11 @@ function exportarExcel(){
 
   // Sheet 1: DRE por evento
   const calcs=S.eventos.filter(e=>noMes(e.mes||e.data)).map(e=>({...e,...calcEv(e)}));
-  const ws1Data=[["Data","Evento","Faturamento","Rec.Bar","Entrada","CMV","CMV%","Custos Dir.","Fixo Rateado","Resultado","Margem%"]];
-  calcs.forEach(e=>ws1Data.push([e.data||"",e.nome||"",e.rec,e.rec_bar,e.entrada||0,e.cmv,+(e.cmvP*100).toFixed(1),e.dir,rateio(),e.res,+(Math.max(0,e.mg)*100).toFixed(1)]));
-  const totRec=calcs.reduce((s,e)=>s+e.rec,0);
-  ws1Data.push(["","TOTAL",totRec,calcs.reduce((s,e)=>s+e.rec_bar,0),calcs.reduce((s,e)=>s+(e.entrada||0),0),calcs.reduce((s,e)=>s+e.cmv,0),+(totRec?calcs.reduce((s,e)=>s+e.cmv,0)/totRec*100:0).toFixed(1),calcs.reduce((s,e)=>s+e.dir,0),rateio()*calcs.length,calcs.reduce((s,e)=>s+e.res,0),""]);
+  const ws1Data=[["Data","Evento","Bar Bruto","Bar Líquido","Porta","Caixinha","Caixinha Casa","Receita Casa","Custos Diretos","Resultado","Margem%"]];
+  calcs.forEach(e=>ws1Data.push([e.data||"",e.nome||"",e.barBruto,e.barLiquido,e.porta,e.caixinha,e.caixinhaCasa,e.receitaCasa,e.custosDiretos,e.resultado,+(Math.max(0,e.mg)*100).toFixed(1)]));
+  const sum=k=>calcs.reduce((s,e)=>s+(e[k]||0),0);
+  ws1Data.push(["","TOTAL",sum("barBruto"),sum("barLiquido"),sum("porta"),sum("caixinha"),sum("caixinhaCasa"),sum("receitaCasa"),sum("custosDiretos"),sum("resultado"),""]);
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws1Data),"Eventos");
-
-  // Sheet 2: Produtos CMV
-  const evIds3=new Set(calcs.map(e=>e.id));
-  const porProd={};
-  S.evento_vendas.filter(v=>evIds3.has(v.evento_id)).forEach(v=>{
-    const qtd=(v.qtd_vendida||0)+(v.qtd_cortesia||0),qv=v.qtd_vendida||0,qc=v.qtd_cortesia||0;
-    if(v.tipo==="produto"){
-      const p=S.produtos.find(x=>x.id===v.item_id);if(!p)return;
-      if(!porProd[p.id])porProd[p.id]={nome:p.nome,cat:p.categoria||"",cmv:0,vendido:0,cortesia:0,receita:0};
-      porProd[p.id].cmv+=qtd*(p.preco_compra||0);porProd[p.id].vendido+=qv;porProd[p.id].cortesia+=qc;porProd[p.id].receita+=qv*(p.preco_venda||0);
-    }
-  });
-  const ws2Data=[["Produto","Categoria","Qtd Vendida","Qtd Cortesia","Receita R$","CMV R$","CMV%"]];
-  Object.values(porProd).sort((a,b)=>b.cmv-a.cmv).forEach(r=>ws2Data.push([r.nome,r.cat,r.vendido,r.cortesia,r.receita,+r.cmv.toFixed(2),+(r.receita?r.cmv/r.receita*100:0).toFixed(1)]));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws2Data),"CMV Produtos");
 
   // Sheet 3: Compras
   const ws3Data=[["Produto","Semana","Data","Qtd","Custo Unit","Total","Fornecedor"]];
@@ -2003,150 +1744,6 @@ function exportarExcel(){
 
   XLSX.writeFile(wb,"Mahau_Fechamento_"+new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")+".xlsx");
 }
-
-// ── ZIGPAY IMPORT ─────────────────────────────────────────────────────────────
-// Categories → Bar revenue
-const ZIG_BAR_CATS = new Set([
-  'Cervejas','Soft Drinks','Garrafas','Garrafas Rum','Garrafas Vodka','Garrafas Whisky',
-  'Combos','Doses','Doses Rum','Doses Tequila','Doses Gin','Doses Cachaças',
-  'Espumante','Espumantes','Vinhos','Vinhos Branco','Vinhos Tinto','LICOR',
-  'Drinks Clássicos','Drinks Autorais','Gin Tônicas','Drinks','Moscow Mules',
-  'Shots','Caipirinhas','Pratos','Pratos Leves','Porções','Lanches','Sobremesas',
-]);
-// Categories → Entrada (service fees)
-const ZIG_ENTRADA_CATS = new Set(['SERVIÇOS','TAXA BISTRO']);
-// Keywords → filter out entirely
-const ZIG_SKIP = ['rider','souvenir','chapelaria','caixinha','permuta',
-  'aniversário','double','canudo','caução','upgrade','ñ vender'];
-
-function parseZigFile(file, cb) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const wb = XLSX.read(e.target.result, {type:'array', cellStyles:false});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
-
-      // Find header row
-      let hIdx = rows.findIndex(r => r && r[0]==='SKU');
-      if(hIdx<0) { alert('Formato não reconhecido. Verifique se é o relatório correto.'); return; }
-
-      const data = rows.slice(hIdx+1).filter(r => r && r[1]); // has name
-
-      let bar=0, entrada=0, items=[];
-      data.forEach(r => {
-        const nome   = String(r[1]||'').trim();
-        const cat    = String(r[2]||'').trim();
-        const qtd    = parseFloat(r[5])||0;
-        const vUnit  = parseFloat(r[6])||0;
-        const vTotal = parseFloat(r[9])||0; // valor total (após desconto)
-
-        if(qtd<=0||vTotal<0) return;
-
-        const nomeLow = nome.toLowerCase();
-        if(ZIG_SKIP.some(k=>nomeLow.includes(k))) return;
-
-        // TAXA/SERVIÇOS → entrada
-        if(ZIG_ENTRADA_CATS.has(cat) || nomeLow.includes('taxa')) {
-          entrada += vTotal; return;
-        }
-
-        if(!ZIG_BAR_CATS.has(cat)) return; // skip unknown
-
-        bar += vTotal;
-        items.push({nome, cat, qtd, vUnit, vTotal});
-      });
-
-      cb({bar, entrada, items});
-    } catch(err) {
-      alert('Erro ao ler arquivo: '+err.message);
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function importZigPay() {
-  const file = el('zig-file')?.files?.[0];
-  if(!file) { alert('Selecione o arquivo Excel do ZigPay'); return; }
-
-  const data   = sv('zig-data');
-  const nome   = sv('zig-nome');
-  if(!data||!nome) { alert('Preencha data e nome do evento'); return; }
-
-  parseZigFile(file, async ({bar, entrada, items}) => {
-    if(!db) { alert('Firebase não conectado'); return; }
-
-    // Create event
-    const mes = mesDeData(data);
-    const ts = firebase.firestore.FieldValue.serverTimestamp();
-    const ev = {
-      id: null,
-      data, mes, nome,
-      publico: nv('zig-pub'),
-      vips:    nv('zig-vips'),
-      bar,
-      entrada,
-      dj:       nv('zig-dj'),
-      seguranca:nv('zig-seg'),
-      staff:    nv('zig-sta'),
-      outros:   nv('zig-out'),
-      origem:   'zigpay',
-    };
-
-    const evRef = await db.collection('eventos').add(Domain.camposCriacao(ev, ts));
-    await evRef.update({id: evRef.id});
-
-    // Create vendas - try to match products
-    for(const item of items) {
-      // Try match by name (fuzzy)
-      const nomeLow = item.nome.toLowerCase();
-      const prod = S.produtos.find(p=>
-        p.nome.toLowerCase()===nomeLow ||
-        nomeLow.includes(p.nome.toLowerCase()) ||
-        p.nome.toLowerCase().includes(nomeLow)
-      );
-      const ficha = !prod && S.fichas.find(f=>
-        f.nome.toLowerCase()===nomeLow ||
-        nomeLow.includes(f.nome.toLowerCase())
-      );
-
-      const vRef = await db.collection('evento_vendas').add(Domain.camposCriacao({
-        id: null,
-        evento_id:    evRef.id,
-        mes,
-        tipo:         ficha?'ficha':prod?'produto':'manual',
-        item_id:      ficha?.id || prod?.id || null,
-        nome_zigpay:  item.nome,
-        cat_zigpay:   item.cat,
-        qtd_vendida:  item.qtd,
-        qtd_cortesia: 0,
-        valor_unit:   item.vUnit,
-        valor_total:  item.vTotal,
-      }, ts));
-      await vRef.update({id: vRef.id}); // write-back do id (corrige vendas inalcançáveis)
-    }
-
-    el('zig-import-box').classList.add('hidden');
-    el('zig-preview').textContent='';
-    alert(`✓ Evento importado!\nBar: R$${bar.toFixed(2)}\nEntrada/Serviços: R$${entrada.toFixed(2)}\n${items.length} itens de venda`);
-  });
-}
-
-// Preview when file selected
-document.addEventListener('change', e => {
-  if(e.target.id!=='zig-file') return;
-  const file = e.target.files?.[0]; if(!file) return;
-  parseZigFile(file, ({bar, entrada, items}) => {
-    el('zig-preview').innerHTML = `
-      <div style="background:#1c2332;border-radius:6px;padding:10px;margin-top:4px">
-        <span style="color:#22c55e;font-weight:600">✓ Arquivo lido:</span>
-        <span style="margin-left:8px">Bar <strong style="color:#e6edf3">R$ ${bar.toFixed(2)}</strong></span>
-        <span style="margin-left:8px">Entrada <strong style="color:#e6edf3">R$ ${entrada.toFixed(2)}</strong></span>
-        <span style="margin-left:8px">${items.length} itens de venda</span>
-      </div>`;
-  });
-});
-
 
 async function seedCombos(){
   if(!db) return;
@@ -2228,53 +1825,14 @@ async function seedCombos(){
 function softDel(col,id){ if(confirm("Mover para a lixeira?")) FS.del(col,id); }
 function restaurarDoc(col,id){ FS.restore(col,id); }
 
-// ── CASCATA EVENTO → VENDAS (batch atômico) ───────────────────────────────────
-// Limite conhecido: batch do Firestore = 500 ops. Eventos com >~400 vendas
-// precisariam de chunking (pendência futura registrada).
-async function softDelEvento(eid){
-  if(!confirm("Mover evento e suas vendas para a lixeira?")) return;
-  if(evSel===eid) evSel=null;
-  if(!db) return;
-  try{
-    const ts=firebase.firestore.FieldValue.serverTimestamp();
-    const batch=db.batch();
-    batch.set(db.collection("eventos").doc(String(eid)),{deletedAt:ts,updatedAt:ts},{merge:true});
-    S.evento_vendas.filter(v=>v.evento_id===eid).forEach(v=>{
-      batch.set(db.collection("evento_vendas").doc(String(v.id)),{deletedAt:ts,updatedAt:ts,deletedCascade:eid},{merge:true});
-    });
-    await batch.commit();
-  }catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); }
-}
-async function restaurarEvento(eid){
-  if(!db) return;
-  try{
-    const ts=firebase.firestore.FieldValue.serverTimestamp(), del=firebase.firestore.FieldValue.delete();
-    const batch=db.batch();
-    batch.update(db.collection("eventos").doc(String(eid)),{deletedAt:del,updatedAt:ts});
-    (S._trash.evento_vendas||[]).filter(v=>v.deletedCascade===eid).forEach(v=>{
-      batch.update(db.collection("evento_vendas").doc(String(v.id)),{deletedAt:del,deletedCascade:del,updatedAt:ts});
-    });
-    await batch.commit();
-  }catch(e){ toast(FS._msg(e),"err","Falha ao restaurar"); }
-}
-async function hardDelEvento(eid){
-  if(!db) return;
-  try{
-    const batch=db.batch();
-    batch.delete(db.collection("eventos").doc(String(eid)));
-    [...(S.evento_vendas||[]),...(S._trash.evento_vendas||[])]
-      .filter(v=>v.evento_id===eid)
-      .forEach(v=>batch.delete(db.collection("evento_vendas").doc(String(v.id))));
-    await batch.commit();
-  }catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); }
-}
+// Soft-delete de evento (sem cascata — não há mais vendas por evento).
+function softDelEvento(eid){ if(confirm("Mover evento para a lixeira?")){ FS.del("eventos",eid); if(evSel===eid) evSel=null; } }
 
 const LIXEIRA_COLS=[
   {col:"produtos",      label:"Produtos"},
   {col:"fichas",        label:"Fichas"},
   {col:"compras",       label:"Compras"},
   {col:"eventos",       label:"Eventos"},
-  {col:"evento_vendas", label:"Vendas"},
   {col:"custos",          label:"Custos fixos"},
   {col:"inventarios",     label:"Inventários (semanal)"},
   {col:"inventarios_mensais", label:"Inventários (mensal)"},
@@ -2284,32 +1842,17 @@ function descreveDoc(col,d){
     case "produtos": case "fichas": case "custos": return d.nome||"(sem nome)";
     case "compras":  return `${(S.produtos.find(p=>p.id===d.produto_id)||{}).nome||d.produto_id||"?"} · ${fmtData(d.data)}`;
     case "eventos":  return `${d.nome||"(sem nome)"} · ${fmtData(d.data)}`;
-    case "evento_vendas":{
-      const it=d.tipo==="ficha"?S.fichas.find(x=>x.id===d.item_id):S.produtos.find(x=>x.id===d.item_id);
-      return (it&&it.nome)||d.nome_zigpay||`(${d.tipo||"venda"})`;
-    }
     case "inventarios": return `${d.semana||""} · ${fmtMes(d.mes||"")||d.data||""}`;
     case "inventarios_mensais": return `Mensal · ${fmtMes(d.mes||"")||d.data||""}`;
     default: return d.id||"";
   }
 }
 function renderLixeira(){
-  const grupos=LIXEIRA_COLS.map(g=>{
-    let itens=S._trash[g.col]||[];
-    // Vendas cascateadas seguem o evento-pai → não aparecem soltas na lixeira.
-    if(g.col==="evento_vendas") itens=itens.filter(v=>!v.deletedCascade);
-    return {...g, itens};
-  }).filter(g=>g.itens.length);
+  const grupos=LIXEIRA_COLS.map(g=>({...g, itens:(S._trash[g.col]||[])})).filter(g=>g.itens.length);
   const total=grupos.reduce((s,g)=>s+g.itens.length,0);
   const linha=(col,d)=>{
-    let desc=descreveDoc(col,d), restore, hard;
-    if(col==="eventos"){
-      const nv=(S._trash.evento_vendas||[]).filter(v=>v.deletedCascade===d.id).length;
-      if(nv) desc+=` <span class="mt" style="font-weight:400">(+${nv} venda${nv>1?"s":""})</span>`;
-      restore=`restaurarEvento('${d.id}')`; hard=`confirmarLimpar(()=>hardDelEvento('${d.id}'))`;
-    } else {
-      restore=`restaurarDoc('${col}','${d.id}')`; hard=`confirmarLimpar(()=>FS.hardDel('${col}','${d.id}'))`;
-    }
+    const desc=descreveDoc(col,d);
+    const restore=`restaurarDoc('${col}','${d.id}')`, hard=`confirmarLimpar(()=>FS.hardDel('${col}','${d.id}'))`;
     return `<tr>
       <td class="w6">${desc}</td>
       <td class="r" style="white-space:nowrap">
@@ -2340,8 +1883,8 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","evento_vendas","custos","inventarios","inventarios_mensais"];
-  const STOCK=new Set(["produtos","fichas","compras","evento_vendas"]);
+  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais"];
+  const STOCK=new Set(["produtos","fichas","compras"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
       S[col]=d.filter(x=>!x.deletedAt);
@@ -2361,7 +1904,7 @@ function unbindData(){
   _unsubs.forEach(u=>{ try{ u&&u(); }catch(_){} });
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
-  S.evento_vendas=[];S.custos=[];S.inventarios=[];S.inventarios_mensais=[];S._trash={};
+  S.custos=[];S.inventarios=[];S.inventarios_mensais=[];S._trash={};
 }
 
 function showLogin(){

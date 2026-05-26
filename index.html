@@ -1902,6 +1902,7 @@ const CONCIL_TABS=[
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
 let eventoZigImport=null; // preview do import de evento Zig (vendas+montáveis), antes de salvar
+let mapaForm=null; // formulário de mapeamento Zig→Estoque em edição
 
 function renderConciliacao(){
   const tab=S.concilTab||"semanas";
@@ -1911,7 +1912,7 @@ function renderConciliacao(){
   const corpo = tab==="semanas" ? concilSemanasHTML()
     : tab==="estoque" ? concilEstoqueHTML()
     : tab==="eventos" ? concilEventosHTML()
-    : `<div class="box"><div class="empty">Em breve (entrega 1d).</div></div>`;
+    : concilMapaHTML();
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
     ${pills}
@@ -2177,6 +2178,99 @@ async function salvarEventoZig(){
   if(!ok) return;
   eventoZigImport=null; renderConciliacao();
   toast(`${nome}: ${nVendas} vendas, ${nMont} montáveis salvos.`,"ok","Evento importado");
+}
+
+// ── Conciliação · aba Mapeamento Zig→Estoque (1d) ─────────────────────────────
+function resumoMapa(m){
+  if(m.tipo==="ignorar") return "ignorado";
+  if(m.tipo==="combo") return `${m.garrafa_qtd||0} garrafa(s) + ${m.redbull_qtd||0} RB`;
+  const r=(m.regras&&m.regras[0]);
+  return r?`→ ${r.nome_produto||r.produto_id||"?"} (${r.quantidade_baixa} ${r.unidade})`:"—";
+}
+
+function mapaFormHTML(){
+  const f=mapaForm; if(f===null) return "";
+  const capt="mapaForm.sku_zig=sv('mp-sku');mapaForm.nome_zig=sv('mp-nome');";
+  return `<div class="fb">
+    <div class="ft">${f.id?"Editar":"Novo"} Mapeamento<button class="bi" onclick="mapaForm=null;renderConciliacao()">✕</button></div>
+    <div class="fg g3">
+      <div class="fi"><label>SKU Zig</label><input id="mp-sku" value="${(f.sku_zig||"").replace(/"/g,"&quot;")}"></div>
+      <div class="fi"><label>Nome na Zig</label><input id="mp-nome" value="${(f.nome_zig||"").replace(/"/g,"&quot;")}"></div>
+      <div class="fi"><label>Tipo</label><select id="mp-tipo" onchange="${capt}mapaForm.tipo=this.value;renderConciliacao()">
+        ${["direto","combo","montavel","ignorar"].map(t=>`<option value="${t}"${f.tipo===t?" selected":""}>${t}</option>`).join("")}
+      </select></div>
+    </div>
+    ${(f.tipo==="direto"||f.tipo==="montavel")?`<div class="fg g3">
+      <div class="fi"><label>Produto que baixa</label><select id="mp-prod">
+        <option value="">-- selecione --</option>
+        ${S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}"${f.regra_produto_id===p.id?" selected":""}>${p.nome}</option>`).join("")}
+      </select></div>
+      <div class="fi"><label>Qtd de baixa / unidade vendida</label><input id="mp-qtd" type="number" step="any" value="${f.regra_qtd||""}"></div>
+      <div class="fi"><label>Unidade</label><select id="mp-un">${["un","ml","g"].map(u=>`<option${(f.regra_unidade||"un")===u?" selected":""}>${u}</option>`).join("")}</select></div>
+    </div>`:""}
+    ${f.tipo==="combo"?`<div class="fg g2">
+      <div class="fi"><label>Garrafas por combo</label><input id="mp-garrafa" type="number" value="${f.garrafa_qtd||""}"></div>
+      <div class="fi"><label>Red Bull por combo</label><input id="mp-redbull" type="number" value="${f.redbull_qtd||""}"></div>
+    </div><div style="font-size:10px;color:#484f58;margin-bottom:8px">As regras detalhadas do combo (garrafa específica, distribuição de Red Bull) entram no motor de conciliação (Sprint 2).</div>`:""}
+    ${f.tipo==="ignorar"?`<div style="font-size:11px;color:#484f58;margin-bottom:8px">Este SKU será ignorado na conciliação (não baixa estoque).</div>`:""}
+    <div style="display:flex;gap:8px"><button class="btn bp" onclick="salvarMapa()">Salvar</button><button class="btn bg_" onclick="mapaForm=null;renderConciliacao()">Cancelar</button></div>
+  </div>`;
+}
+
+function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regra_unidade:"un"}; S.concilTab="mapa"; renderConciliacao(); }
+function editarMapa(id){
+  const m=S.mapeamento_zig.find(x=>x.id===id); if(!m) return;
+  const r=(m.regras&&m.regras[0])||{};
+  mapaForm={id:m.id,sku_zig:m.sku_zig,nome_zig:m.nome_zig,tipo:m.tipo||"direto",
+    regra_produto_id:r.produto_id,regra_qtd:r.quantidade_baixa,regra_unidade:r.unidade||"un",
+    garrafa_qtd:m.garrafa_qtd,redbull_qtd:m.redbull_qtd};
+  renderConciliacao();
+}
+function salvarMapa(){
+  const f=mapaForm; if(!f) return;
+  const sku=sv("mp-sku").trim(), nome=sv("mp-nome").trim(), tipo=sv("mp-tipo");
+  if(!validar([[sku,"Informe o SKU da Zig."],[tipo,"Escolha o tipo."]])) return;
+  const doc={id:f.id||null, sku_zig:sku, nome_zig:nome, tipo, ativo:true, regras:[], redbull_qtd:0, garrafa_qtd:0};
+  if(tipo==="direto"||tipo==="montavel"){
+    const pid=sv("mp-prod"), p=S.produtos.find(x=>x.id===pid), qtd=nv("mp-qtd"), un=sv("mp-un")||"un";
+    if(!validar([[pid,"Selecione o produto que baixa."],[qtd>0,"A quantidade de baixa deve ser maior que zero."]])) return;
+    doc.regras=[{produto_id:pid, nome_produto:p?p.nome:"", quantidade_baixa:qtd, unidade:un, fonte:tipo==="montavel"?"montavel":"hardcoded"}];
+  } else if(tipo==="combo"){
+    doc.garrafa_qtd=nv("mp-garrafa"); doc.redbull_qtd=nv("mp-redbull");
+  }
+  FS.save("mapeamento_zig",doc);
+  mapaForm=null; renderConciliacao();
+}
+
+function concilMapaHTML(){
+  const skusVistos={};
+  S.eventos_zig.forEach(e=>(e.vendas||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.nome||""; }));
+  const mapados=new Set(S.mapeamento_zig.map(m=>m.sku_zig));
+  const naoMap=Object.entries(skusVistos).filter(([sku])=>!mapados.has(sku)).map(([sku,nome])=>({sku,nome}));
+  const maps=S.mapeamento_zig.slice().sort((a,b)=>(a.nome_zig||a.sku_zig||"").localeCompare(b.nome_zig||b.sku_zig||""));
+  return `
+    ${mapaFormHTML()}
+    ${naoMap.length?`<div class="box">
+      <div class="bh"><span class="bt" style="color:#f59e0b">⚠ ${naoMap.length} SKU(s) não mapeado(s)</span></div>
+      <div class="tw"><table><thead><tr><th>SKU</th><th>Nome (Zig)</th><th class="r">Ação</th></tr></thead>
+      <tbody>${naoMap.map(s=>`<tr style="background:rgba(245,158,11,.05)">
+        <td class="mn">${s.sku}</td><td class="w6">${s.nome}</td>
+        <td class="r"><button class="btn bp bsm" data-n="${(s.nome||"").replace(/"/g,"&quot;")}" onclick="novoMapa('${s.sku}',this.dataset.n)">Mapear</button></td>
+      </tr>`).join("")}</tbody></table></div>
+    </div>`:(S.eventos_zig.length?`<div class="ok-strip">Todos os SKUs dos eventos importados estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe eventos (aba 🎟) para detectar SKUs a mapear.</div>`)}
+    <div class="box">
+      <div class="bh"><span class="bt">${maps.length} mapeamento(s)</span><button class="btn bp bsm" onclick="novoMapa('','')">+ Novo</button></div>
+      <div class="tw"><table>
+        <thead><tr><th>SKU</th><th>Nome (Zig)</th><th>Tipo</th><th>Baixa</th><th></th></tr></thead>
+        <tbody>${maps.length?maps.map(m=>`<tr>
+          <td class="mn">${m.sku_zig||""}</td><td class="w6">${m.nome_zig||""}</td>
+          <td>${chip(m.tipo||"?",m.tipo==="ignorar"?"#484f58":m.tipo==="combo"?"#8b5cf6":"#2563eb")}</td>
+          <td class="mt" style="font-size:10px">${resumoMapa(m)}</td>
+          <td style="white-space:nowrap"><button class="bi" onclick="editarMapa('${m.id}')">✏</button><button class="bi" onclick="softDel('mapeamento_zig','${m.id}')">✕</button></td>
+        </tr>`).join(""):`<tr><td colspan="5" class="empty">Nenhum mapeamento ainda.</td></tr>`}
+        </tbody>
+      </table></div>
+    </div>`;
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────

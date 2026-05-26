@@ -1903,6 +1903,7 @@ const CONCIL_TABS=[
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
 let vendasZigImport=null; // preview do import de VENDAS Zig (produtos vendidos+montáveis) p/ conciliação de estoque — NÃO é o evento financeiro
 let mapaForm=null; // formulário de mapeamento Zig→Estoque em edição
+let concilMapaQ=""; // busca da lista de SKUs não mapeados
 
 function renderConciliacao(){
   const tab=S.concilTab||"semanas";
@@ -2264,16 +2265,21 @@ function concilMapaHTML(){
   S.vendas_zig.forEach(e=>(e.itens||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.produto||""; }));
   const mapados=new Set(S.mapeamento_zig.map(m=>m.sku_zig));
   const naoMap=Object.entries(skusVistos).filter(([sku])=>!mapados.has(sku)).map(([sku,nome])=>({sku,nome}));
+  const q=(concilMapaQ||"").toLowerCase().trim();
+  const naoMapF=q?naoMap.filter(s=>s.sku.toLowerCase().includes(q)||(s.nome||"").toLowerCase().includes(q)):naoMap;
   const maps=S.mapeamento_zig.slice().sort((a,b)=>(a.nome_zig||a.sku_zig||"").localeCompare(b.nome_zig||b.sku_zig||""));
   return `
     ${mapaFormHTML()}
     ${naoMap.length?`<div class="box">
-      <div class="bh"><span class="bt" style="color:#f59e0b">⚠ ${naoMap.length} SKU(s) não mapeado(s)</span></div>
+      <div class="bh"><span class="bt" style="color:#f59e0b">⚠ ${naoMap.length} SKU(s) não mapeado(s)${q?` · ${naoMapF.length} no filtro`:""}</span></div>
+      <div class="bb" style="padding-bottom:0">
+        <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar SKU ou nome..." value="${concilMapaQ.replace(/"/g,"&quot;")}" oninput="concilMapaQ=this.value;renderConciliacao()"></div>
+      </div>
       <div class="tw"><table><thead><tr><th>SKU</th><th>Nome (Zig)</th><th class="r">Ação</th></tr></thead>
-      <tbody>${naoMap.map(s=>`<tr style="background:rgba(245,158,11,.05)">
+      <tbody>${naoMapF.length?naoMapF.map(s=>`<tr style="background:rgba(245,158,11,.05)">
         <td class="mn">${s.sku}</td><td class="w6">${s.nome}</td>
         <td class="r"><button class="btn bp bsm" data-n="${(s.nome||"").replace(/"/g,"&quot;")}" onclick="novoMapa('${s.sku}',this.dataset.n)">Mapear</button></td>
-      </tr>`).join("")}</tbody></table></div>
+      </tr>`).join(""):`<tr><td colspan="3" class="empty">Nenhum SKU corresponde a "${q.replace(/"/g,"&quot;")}".</td></tr>`}</tbody></table></div>
     </div>`:(S.vendas_zig.length?`<div class="ok-strip">Todos os SKUs da Saída importada estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe a Saída Geral (aba 📊) para detectar SKUs a mapear.</div>`)}
     <div class="box">
       <div class="bh"><span class="bt">${maps.length} mapeamento(s)</span><button class="btn bp bsm" onclick="novoMapa('','')">+ Novo</button></div>

@@ -132,14 +132,26 @@ const Domain = {
     return dn>0 ? (Domain.totalFixo(custos,mesSel)/dn) : 0;
   },
 
-  // P&L de um evento. rateioVal = valor já calculado por Domain.rateio(...).
-  calcEv(evento, vendas, produtos, fichas, rateioVal){
-    const entrada=evento.entrada||0;
-    const {cmv,rec_bar}=Domain.cmvEvento(evento.id, vendas, produtos, fichas);
-    const rec=rec_bar+entrada;
-    const dir=(evento.dj||0)+(evento.seguranca||0)+(evento.staff||0)+(evento.outros||0);
-    const res=rec-cmv-dir-(rateioVal||0);
-    return {rec,cmv,cmvP:rec?cmv/rec:0,dir,res,mg:rec?res/rec:0,rec_bar};
+  // P&L da NOITE (novo modelo). A caixinha sai do bar bruto; pct_casa em PERCENT (0–100).
+  // O CMV NÃO entra aqui — é consolidado mensalmente via inventário (cmvRealMensal).
+  // rateioVal = rateio do custo fixo já calculado por Domain.rateio(...).
+  calcEv(evento, rateioVal){
+    const barBruto=evento.bar_bruto||0;
+    const caixinha=evento.caixinha||0;
+    const porta=evento.entrada||0;
+    const caixinhaCasa=caixinha*((evento.pct_casa||0)/100);
+    const caixinhaFunc=caixinha-caixinhaCasa;
+    const barLiquido=barBruto-caixinha;
+    const receitaCasa=barLiquido+porta+caixinhaCasa;
+    const custosDiretos=(evento.dj||0)+(evento.seguranca||0)+(evento.staff||0)+(evento.outros||0);
+    const rat=rateioVal||0;
+    const resultado=receitaCasa-custosDiretos-rat;
+    return {
+      barBruto, caixinha, caixinhaCasa, caixinhaFunc, barLiquido, porta,
+      receitaCasa, custosDiretos, rateio:rat, resultado, mg:receitaCasa?resultado/receitaCasa:0,
+      // compat legado p/ consumidores ainda não migrados (removido na Fase 3b):
+      rec:receitaCasa, res:resultado, rec_bar:barLiquido, dir:custosDiretos, cmv:0, cmvP:0
+    };
   },
 
 };

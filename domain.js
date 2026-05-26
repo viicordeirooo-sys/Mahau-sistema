@@ -35,6 +35,21 @@ const Domain = {
     return {...(data||{}), orgId:(data&&data.orgId)||"default", createdAt:ts, updatedAt:ts};
   },
 
+  // Valor (R$) de uma contagem física de inventário: Σ qtd × preco_compra.
+  valorInventario(contagens, produtos){
+    if(!contagens) return 0;
+    const preco={}; (produtos||[]).forEach(p=>{preco[p.id]=p.preco_compra||0;});
+    return Object.entries(contagens).reduce((s,[pid,qtd])=>s+(parseFloat(qtd)||0)*(preco[pid]||0),0);
+  },
+
+  // Mês anterior: "2026-05" → "2026-04"; "2026-01" → "2025-12". Não-"YYYY-MM" → "".
+  mesAnterior(ym){
+    if(typeof ym!=="string"||!/^\d{4}-\d{2}$/.test(ym)) return "";
+    let [y,m]=ym.split("-").map(Number);
+    m-=1; if(m===0){m=12;y-=1;}
+    return `${y}-${String(m).padStart(2,"0")}`;
+  },
+
   // Índice de movimentação de estoque construído em UMA passada.
   // Retorna { [produtoId]: { entradasMl, consumoMl } }. Tudo em ml.
   estoqueIndex(produtos, fichas, compras, vendas){

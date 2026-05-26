@@ -376,7 +376,7 @@ function confirmarLimpar(cb) {
 const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
-  evento_vendas:[],custos:[],inventarios:[],config:{datasNoMes:4},
+  evento_vendas:[],custos:[],inventarios:[],inventarios_mensais:[],config:{datasNoMes:4},
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null  // null = todos os meses
 };
@@ -1547,6 +1547,8 @@ function renderCMV(){
       ${kpi("Rec. Bar",R(calcs.reduce((s,e)=>s+e.rec_bar,0)),"sem cobertura","#e6edf3","#8b5cf6")}
     </div>
 
+    ${blocoCmvReal(tCmv)}
+
     ${catRows.length?`<div class="box">
       <div class="bh"><span class="bt">CMV por Categoria</span></div>
       <div class="tw"><table>
@@ -1589,8 +1591,14 @@ function renderCMV(){
 
 // ── INVENTÁRIO SEMANAL ────────────────────────────────────────────────────────
 let invSem="S1",invData="",invSaving=false,invContagens={};
+let invModo="semanal", invMensalContagens={};
 
 function renderInventario(){
+  const pills=`<div class="pills" style="margin-bottom:12px">
+    <button class="pill${invModo==='semanal'?' on':''}" onclick="invModo='semanal';renderInventario()">📅 Semanal</button>
+    <button class="pill${invModo==='mensal'?' on':''}" onclick="invModo='mensal';renderInventario()">📦 Mensal (CMV)</button>
+  </div>`;
+  if(invModo==='mensal'){ renderInventarioMensal(pills); return; }
   const semOpts=["S1","S2","S3","S4"];
   const historico=S.inventarios.filter(i=>!S.mesSel||i.mes===S.mesSel)
     .sort((a,b)=>(b.mes||"").localeCompare(a.mes||"")||(b.data||"").localeCompare(a.data||""));
@@ -1598,7 +1606,7 @@ function renderInventario(){
   let rows=S.produtos.filter(p=>p.capacidade_ml&&p.preco_compra)
     .sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.nome.localeCompare(b.nome));
 
-  set("p-inv",`
+  set("p-inv", pills+`
     <div class="pg-h">
       <div><div class="eyebrow">CONTROLE FÍSICO</div><div class="pg-t">Inventário Semanal</div></div>
     </div>
@@ -1710,6 +1718,134 @@ async function salvarInventario(){
     : `Inventário salvo! ${novos} produtos contados.`);
 }
 
+// ── INVENTÁRIO MENSAL (base do CMV Real) ──────────────────────────────────────
+function renderInventarioMensal(pills){
+  const mesAlvo = S.mesSel || new Date().toISOString().slice(0,7);
+  const existente = S.inventarios_mensais.find(i=>i.mes===mesAlvo);
+  const valorSalvo = existente ? Domain.valorInventario(existente.contagens, S.produtos) : 0;
+  const rows = S.produtos.filter(p=>p.preco_compra>0)
+    .sort((a,b)=>(a.categoria||"").localeCompare(b.categoria||"")||a.nome.localeCompare(b.nome));
+  const historico = S.inventarios_mensais.slice().sort((a,b)=>(b.mes||"").localeCompare(a.mes||""));
+  set("p-inv", pills+`
+    <div class="pg-h"><div><div class="eyebrow">CONTROLE FÍSICO</div><div class="pg-t">Inventário Mensal — ${fmtMes(mesAlvo)}</div></div></div>
+    <div class="fb">
+      <div class="ft">Contagem de fim de ${fmtMes(mesAlvo)}
+        <span style="font-weight:400;font-size:11px;color:#484f58">· vira Estoque Final deste mês e Inicial do próximo</span></div>
+      <div style="font-size:11px;color:#484f58;margin-bottom:10px">
+        Contagem física (un). Novas contagens são mescladas às já salvas. Produtos com custo (${rows.length}).
+        ${existente?`<span style="float:right">Valor salvo do mês: <strong style="color:#3b82f6">${R(valorSalvo)}</strong></span>`:""}
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th>Cat.</th><th class="r">Salvo</th><th class="r">Custo un</th><th class="r">Nova contagem</th><th class="r">Valor R$</th></tr></thead>
+        <tbody>${rows.map(p=>{
+          const key=p.id;
+          const salvo = existente&&existente.contagens&&existente.contagens[key]!==undefined ? existente.contagens[key] : null;
+          const fis = invMensalContagens[key]!==undefined ? invMensalContagens[key] : "";
+          const valorLinha = fis!==""&&fis!==undefined ? (parseFloat(fis)||0)*(p.preco_compra||0) : null;
+          return `<tr>
+            <td class="w6">${p.nome}</td>
+            <td class="mt" style="font-size:10px">${p.categoria||""}</td>
+            <td class="r mn mt">${salvo!==null?salvo:"—"}</td>
+            <td class="r mn mt">${Rf(p.preco_compra||0)}</td>
+            <td><input class="bulk-inp" type="number" step="0.5" placeholder="${salvo!==null?salvo:"—"}" value="${fis}"
+              oninput="invMensalContagens['${key}']=this.value===''?undefined:parseFloat(this.value);updateInvMensalRow(this,'${key}',${p.preco_compra||0})"
+              style="width:90px"></td>
+            <td class="r mn" id="invm-val-${key}">${valorLinha!==null?Rf(valorLinha):"—"}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn bp" onclick="salvarInventarioMensal()">💾 Salvar Contagem de ${fmtMes(mesAlvo)}</button>
+      </div>
+    </div>
+    ${blocoCmvReal(null)}
+    ${historico.length?`<div class="box">
+      <div class="bh"><span class="bt">Histórico de Contagens Mensais</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Mês</th><th class="r">Itens</th><th class="r">Valor do estoque</th></tr></thead>
+        <tbody>${historico.map(inv=>`<tr>
+          <td>${fmtMes(inv.mes||"")||inv.data||""}</td>
+          <td class="r">${Object.keys(inv.contagens||{}).length}</td>
+          <td class="r mn">${R(Domain.valorInventario(inv.contagens,S.produtos))}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`:""}
+  `);
+}
+
+function updateInvMensalRow(input,pid,custo){
+  const v=input.value===""?null:parseFloat(input.value);
+  const cell=document.getElementById("invm-val-"+pid);
+  if(cell) cell.textContent=(v===null||isNaN(v))?"—":Rf(v*custo);
+}
+
+async function salvarInventarioMensal(){
+  const mes = S.mesSel || new Date().toISOString().slice(0,7);
+  const novas={};
+  Object.entries(invMensalContagens).forEach(([k,v])=>{ if(v!==undefined) novas[k]=parseFloat(v)||0; });
+  if(!validar([
+    [Object.keys(novas).length>0, "Preencha ao menos uma contagem."],
+    [Object.values(novas).every(n=>n>=0), "Contagens não podem ser negativas."],
+  ])) return;
+  const existente = S.inventarios_mensais.find(i=>i.mes===mes);
+  const contagens = existente ? {...existente.contagens, ...novas} : novas;
+  const ok = await FS.save("inventarios_mensais", {
+    id: existente?existente.id:null, mes, data:new Date().toISOString().slice(0,10), contagens
+  });
+  if(!ok) return;
+  invMensalContagens={};
+  alert(`Contagem mensal de ${fmtMes(mes)} salva!\n${Object.keys(contagens).length} produtos · valor do estoque ${R(Domain.valorInventario(contagens,S.produtos))}.`);
+}
+
+// CMV Real (contábil) do mês selecionado: Estoque Inicial (mês anterior) + Compras − Estoque Final.
+// Encadeado: o inventário mensal de M−1 é o estoque inicial de M.
+function cmvRealMensal(){
+  if(!S.mesSel) return {semMes:true};
+  const mes=S.mesSel, mesPrev=Domain.mesAnterior(mes);
+  const invFinal=S.inventarios_mensais.find(i=>i.mes===mes);
+  const invInicial=S.inventarios_mensais.find(i=>i.mes===mesPrev);
+  const compras=totalComprasMes();
+  const final$=invFinal?Domain.valorInventario(invFinal.contagens,S.produtos):null;
+  const inicial$=invInicial?Domain.valorInventario(invInicial.contagens,S.produtos):null;
+  const cmv=(invFinal&&invInicial)?(inicial$+compras-final$):null;
+  return {mes,mesPrev,inicial$,final$,compras,cmv,temFinal:!!invFinal,temInicial:!!invInicial};
+}
+
+// Bloco visual CMV Real (e, se `teorico` for passado, comparação com o teórico + desvio).
+function blocoCmvReal(teorico){
+  const cr=cmvRealMensal();
+  let inner;
+  if(cr.semMes){
+    inner=`<div class="empty">Selecione um mês específico no topo para ver o CMV Real.</div>`;
+  } else if(!cr.temFinal||!cr.temInicial){
+    const faltam=[];
+    if(!cr.temInicial) faltam.push("inicial — contagem de "+fmtMes(cr.mesPrev));
+    if(!cr.temFinal) faltam.push("final — contagem de "+fmtMes(cr.mes));
+    inner=`<div class="empty">CMV Real indisponível. Faltam contagens mensais:<br><strong>${faltam.join("<br>")}</strong><br>
+      <span style="font-size:10px">Faça a contagem na aba <strong>Mensal</strong> do Inventário.</span></div>`;
+  } else {
+    const desvio = teorico!=null ? cr.cmv-teorico : null;
+    const linhas=[
+      {l:"Estoque Inicial ("+fmtMes(cr.mesPrev)+")",v:R(cr.inicial$)},
+      {l:"(+) Compras do mês",v:R(cr.compras)},
+      {l:"(–) Estoque Final ("+fmtMes(cr.mes)+")",v:"– "+R(cr.final$)},
+      {sep:true},
+      {l:"= CMV Real",v:R(cr.cmv),bold:true,c:"#e6edf3"},
+    ];
+    if(teorico!=null){
+      linhas.push({l:"CMV Teórico (vendas)",v:R(teorico),c:"#8b949e"});
+      linhas.push({l:"Desvio (Real − Teórico)",v:R(desvio),bold:true,c:Math.abs(desvio)<1?"#22c55e":(desvio>0?"#ef4444":"#f59e0b")});
+    }
+    inner=linhas.map(r=>r.sep?`<div class="fecha-sep"></div>`:`
+      <div class="fecha-row">
+        <span style="color:${r.c||"#8b949e"};font-weight:${r.bold?700:400}">${r.l}</span>
+        <span style="font-family:monospace;font-weight:${r.bold?700:400};color:${r.c||"#e6edf3"}">${r.v}</span>
+      </div>`).join("");
+    if(teorico!=null) inner+=`<div style="font-size:10px;color:#484f58;margin-top:8px">Desvio positivo = saiu mais estoque do que as vendas explicam (perdas/quebras/erros).</div>`;
+  }
+  return `<div class="box"><div class="bh"><span class="bt">CMV Real (inventário)${teorico!=null?" vs Teórico":""}</span></div><div class="bb">${inner}</div></div>`;
+}
+
 
 // ── FECHAMENTO MENSAL ─────────────────────────────────────────────────────────
 function renderFechamento(){
@@ -1722,6 +1858,7 @@ function renderFechamento(){
   const tf=totalFixo();
   const tRes=calcs.reduce((s,e)=>s+e.res,0);
   const tCompras=totalComprasMes();
+  const cr=cmvRealMensal();
 
   const evIds2=new Set(calcs.map(e=>e.id));
   const tCortesia=S.evento_vendas.filter(v=>evIds2.has(v.evento_id)).reduce((s,v)=>{
@@ -1744,6 +1881,7 @@ function renderFechamento(){
       ${kpi("CMV Total",R(tCmv),"CMV% "+P(tRec?tCmv/tRec:0),tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e",tRec&&tCmv/tRec>0.28?"#ef4444":"#22c55e")}
       ${kpi("Resultado",R(tRes),"Margem "+P(tRec?tRes/tRec:0),tRes>0?"#22c55e":"#ef4444",tRes>0?"#22c55e":"#ef4444")}
       ${kpi("Valor em Estoque",R(valEstoque),"custo atual","#e6edf3","#3b82f6")}
+      ${kpi("CMV Real",(cr.semMes||cr.cmv==null)?"—":R(cr.cmv),cr.cmv!=null?"vs Teórico "+R(tCmv):(cr.semMes?"selecione 1 mês":"faltam contagens"),"#e6edf3","#8b5cf6")}
     </div>
 
     <div class="box">
@@ -1778,6 +1916,8 @@ function renderFechamento(){
         </div>
       </div>
     </div>
+
+    ${blocoCmvReal(tCmv)}
 
     <div class="box">
       <div class="bh"><span class="bt">Resultado por Evento</span></div>
@@ -2127,8 +2267,9 @@ const LIXEIRA_COLS=[
   {col:"compras",       label:"Compras"},
   {col:"eventos",       label:"Eventos"},
   {col:"evento_vendas", label:"Vendas"},
-  {col:"custos",        label:"Custos fixos"},
-  {col:"inventarios",   label:"Inventários"},
+  {col:"custos",          label:"Custos fixos"},
+  {col:"inventarios",     label:"Inventários (semanal)"},
+  {col:"inventarios_mensais", label:"Inventários (mensal)"},
 ];
 function descreveDoc(col,d){
   switch(col){
@@ -2140,6 +2281,7 @@ function descreveDoc(col,d){
       return (it&&it.nome)||d.nome_zigpay||`(${d.tipo||"venda"})`;
     }
     case "inventarios": return `${d.semana||""} · ${fmtMes(d.mes||"")||d.data||""}`;
+    case "inventarios_mensais": return `Mensal · ${fmtMes(d.mes||"")||d.data||""}`;
     default: return d.id||"";
   }
 }
@@ -2190,7 +2332,7 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","evento_vendas","custos","inventarios"];
+  const COLS=["produtos","fichas","compras","eventos","evento_vendas","custos","inventarios","inventarios_mensais"];
   const STOCK=new Set(["produtos","fichas","compras","evento_vendas"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
@@ -2211,7 +2353,7 @@ function unbindData(){
   _unsubs.forEach(u=>{ try{ u&&u(); }catch(_){} });
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
-  S.evento_vendas=[];S.custos=[];S.inventarios=[];S._trash={};
+  S.evento_vendas=[];S.custos=[];S.inventarios=[];S.inventarios_mensais=[];S._trash={};
 }
 
 function showLogin(){

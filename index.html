@@ -736,7 +736,7 @@ function renderBulkEdit(){
       </div>
     </div>
     <div class="lc-strip" style="font-size:11px;color:#3b82f6">
-      ℹ Preencha <strong>Custo</strong>, <strong>Cap. ml</strong> e <strong>Mínimo</strong>. Campos em amarelo têm alteração pendente. Clique em "Salvar Tudo" quando terminar.
+      ℹ Preencha <strong>Custo</strong>, <strong>Venda</strong>, <strong>Cap. ml</strong> e <strong>Mínimo</strong>. A <strong>Margem</strong> é calculada ao vivo. Campos em amarelo têm alteração pendente. Clique em "Salvar Tudo" quando terminar.
     </div>
     <div class="flt">
       <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar produto..." value="${prodQ}" oninput="prodQ=this.value;renderBulkEdit()"></div>
@@ -750,6 +750,8 @@ function renderBulkEdit(){
         <thead><tr>
           <th>Produto</th><th>Cat.</th>
           <th class="r">Custo Unit (R$)</th>
+          <th class="r">Venda (R$)</th>
+          <th class="r">Margem</th>
           <th class="r">Cap. (ml)</th>
           <th>Unidade</th>
           <th class="r">Estoque Mín</th>
@@ -758,6 +760,10 @@ function renderBulkEdit(){
         <tbody>${rows.map(p=>{
           const bc=bulkChanges[p.id]||{};
           const cu=bc.preco_compra!==undefined?bc.preco_compra:p.preco_compra||"";
+          const vd=bc.preco_venda!==undefined?bc.preco_venda:p.preco_venda||"";
+          const custoEf=bc.preco_compra!==undefined?bc.preco_compra:(p.preco_compra||0);
+          const vendaEf=bc.preco_venda!==undefined?bc.preco_venda:(p.preco_venda||0);
+          const mgB=(vendaEf>0&&custoEf>0)?((vendaEf-custoEf)/vendaEf):null;
           const cap=bc.capacidade_ml!==undefined?bc.capacidade_ml:p.capacidade_ml||"";
           const un=bc.unidade||p.unidade||"garrafa";
           const mn=bc.estoque_min!==undefined?bc.estoque_min:p.estoque_min||"";
@@ -767,7 +773,10 @@ function renderBulkEdit(){
             <td class="w6">${p.nome}</td>
             <td class="mt" style="font-size:10px">${p.categoria||""}</td>
             <td><input class="bulk-inp${dirty&&bc.preco_compra!==undefined?" bulk-dirty":""}" type="number" value="${cu}" step="0.01" placeholder="0.00"
-              onchange="setBulk('${p.id}','preco_compra',parseFloat(this.value)||0);this.classList.add('bulk-dirty')"></td>
+              onchange="setBulk('${p.id}','preco_compra',parseFloat(this.value)||0);this.classList.add('bulk-dirty');updateBulkMargem('${p.id}')"></td>
+            <td><input class="bulk-inp${dirty&&bc.preco_venda!==undefined?" bulk-dirty":""}" type="number" value="${vd}" step="0.01" placeholder="0.00"
+              onchange="setBulk('${p.id}','preco_venda',parseFloat(this.value)||0);this.classList.add('bulk-dirty');updateBulkMargem('${p.id}')"></td>
+            <td class="r" id="bulk-mg-${p.id}">${mgB!==null?chip(P(mgB),mgB>0.5?"#22c55e":mgB>0.3?"#f59e0b":"#ef4444"):"—"}</td>
             <td><input class="bulk-inp${dirty&&bc.capacidade_ml!==undefined?" bulk-dirty":""}" type="number" value="${cap}" placeholder="750"
               onchange="setBulk('${p.id}','capacidade_ml',parseFloat(this.value)||0);this.classList.add('bulk-dirty')"></td>
             <td><select class="bulk-inp" onchange="setBulk('${p.id}','unidade',this.value)">
@@ -792,6 +801,16 @@ function renderBulkEdit(){
 function setBulk(pid,field,val){
   if(!bulkChanges[pid]) bulkChanges[pid]={};
   bulkChanges[pid][field]=val;
+}
+
+// Recalcula a célula de Margem ao vivo no Editar em Massa (custo/venda já em bulkChanges).
+function updateBulkMargem(pid){
+  const cell=document.getElementById("bulk-mg-"+pid); if(!cell) return;
+  const p=S.produtos.find(x=>x.id===pid)||{}, bc=bulkChanges[pid]||{};
+  const custo=bc.preco_compra!==undefined?bc.preco_compra:(p.preco_compra||0);
+  const venda=bc.preco_venda!==undefined?bc.preco_venda:(p.preco_venda||0);
+  if(venda>0&&custo>0){ const mg=(venda-custo)/venda; cell.innerHTML=chip(P(mg),mg>0.5?"#22c55e":mg>0.3?"#f59e0b":"#ef4444"); }
+  else cell.textContent="—";
 }
 
 async function saveBulkAll(){

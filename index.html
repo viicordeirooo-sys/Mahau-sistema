@@ -1900,6 +1900,7 @@ const CONCIL_TABS=[
   {id:"eventos", label:"🎟 Eventos Zig"},
   {id:"mapa",    label:"🔗 Mapeamento"},
 ];
+let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
 
 function renderConciliacao(){
   const tab=S.concilTab||"semanas";
@@ -1907,7 +1908,8 @@ function renderConciliacao(){
     ${CONCIL_TABS.map(t=>`<button class="pill${tab===t.id?" on":""}" onclick="S.concilTab='${t.id}';renderConciliacao()">${t.label}</button>`).join("")}
   </div>`;
   const corpo = tab==="semanas" ? concilSemanasHTML()
-    : `<div class="box"><div class="empty">Em breve (entrega ${tab==="estoque"?"1b":tab==="eventos"?"1c":"1d"}).</div></div>`;
+    : tab==="estoque" ? concilEstoqueHTML()
+    : `<div class="box"><div class="empty">Em breve (entrega ${tab==="eventos"?"1c":"1d"}).</div></div>`;
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
     ${pills}
@@ -1968,6 +1970,111 @@ function salvarSemana(){
 function toggleStatusSemana(id){
   const s=S.semanas_conciliacao.find(x=>x.id===id); if(!s) return;
   FS.save("semanas_conciliacao",{...s, status: s.status==="finalizado"?"rascunho":"finalizado"});
+}
+
+// ── Conciliação · aba Estoque (1b) ────────────────────────────────────────────
+function concilEstoqueHTML(){
+  const sel=S.concilSemanaSel;
+  if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para importar estoque.</div>`;
+  const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
+  const imp=estoqueImport;
+  let html=`<div class="fb">
+    <div class="ft">Importar Estoque — ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">Envie o XLSX da planilha de produtos (aba "Produtos"). Revise o preview e escolha <strong>ANTES</strong> ou <strong>DEPOIS</strong>.</div>
+    <input type="file" id="est-file" accept=".xlsx,.xls" onchange="importEstoqueFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+  </div>`;
+  if(imp){
+    const novos=imp.itens.filter(i=>i.novo).length, varc=imp.itens.filter(i=>i.custoVariou).length, negs=imp.itens.filter(i=>i.negativo).length;
+    html+=`<div class="kpis">
+      ${kpi("Itens lidos",imp.itens.length+"",imp.fileName,"#e6edf3","#2563eb")}
+      ${kpi("Novos (s/ cadastro)",novos+"",novos?"só sinalizados":"todos cadastrados",novos?"#f59e0b":"#22c55e",novos?"#f59e0b":"#22c55e")}
+      ${kpi("Custo +30%",varc+"",varc?"conferir":"ok",varc?"#f59e0b":"#22c55e",varc?"#f59e0b":"#22c55e")}
+      ${kpi("Estoque negativo",negs+"",negs?"conferir":"ok",negs?"#ef4444":"#22c55e",negs?"#ef4444":"#22c55e")}
+    </div>
+    <div class="fb">
+      <div class="fg g3">
+        <div class="fi"><label>Tipo</label><select id="est-tipo">
+          <option value="antes">Estoque ANTES (início)</option>
+          <option value="depois">Estoque DEPOIS (fim)</option>
+        </select></div>
+        <div class="fi"><label>Data da contagem</label><input id="est-data" type="date" value="${s.periodo_inicio||""}"></div>
+        <div class="fi" style="justify-content:flex-end;flex-direction:row;align-items:flex-end">
+          <button class="btn bp" onclick="salvarEstoqueImport()">💾 Salvar Estoque (${imp.itens.length})</button>
+        </div>
+      </div>
+    </div>
+    <div class="box">
+      <div class="bh"><span class="bt">Preview — ${imp.itens.length} itens</span><button class="btn bg_ bsm" onclick="estoqueImport=null;renderConciliacao()">✕ Descartar</button></div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th>Dep.</th><th class="r">Contado</th><th>Medida</th><th class="r">Custo</th><th>Situação</th></tr></thead>
+        <tbody>${imp.itens.map(i=>`<tr style="${i.novo?"background:rgba(245,158,11,.05)":i.negativo?"background:rgba(239,68,68,.05)":""}">
+          <td class="w6">${i.nome}</td>
+          <td class="mt" style="font-size:10px">${i.departamento||""}</td>
+          <td class="r mn">${i.estoque_contado}</td>
+          <td class="mt">${i.medida||""}</td>
+          <td class="r mn">${i.custo?Rf(i.custo):"—"}</td>
+          <td>${i.novo?chip("novo","#f59e0b"):""}${i.custoVariou?chip("custo↑","#f59e0b"):""}${i.negativo?chip("negativo","#ef4444"):""}${(!i.novo&&!i.custoVariou&&!i.negativo)?chip("ok","#22c55e"):""}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`;
+  }
+  const docs=S.estoques.filter(e=>e.semana_id===sel).sort((a,b)=>(a.tipo||"").localeCompare(b.tipo||""));
+  if(docs.length){
+    html+=`<div class="box"><div class="bh"><span class="bt">Estoques salvos desta semana</span></div>
+      <div class="tw"><table><thead><tr><th>Tipo</th><th>Data</th><th class="r">Itens</th><th class="r">Valor (R$)</th><th></th></tr></thead>
+      <tbody>${docs.map(e=>{
+        const val=(e.produtos||[]).reduce((a,p)=>a+(p.estoque_contado||0)*(p.custo||0),0);
+        return `<tr><td>${chip(e.tipo==="antes"?"ANTES":"DEPOIS",e.tipo==="antes"?"#2563eb":"#8b5cf6")}</td>
+          <td class="mn">${fmtData(e.data_contagem)}</td><td class="r">${(e.produtos||[]).length}</td>
+          <td class="r mn">${R(val)}</td>
+          <td><button class="bi" onclick="softDel('estoques','${e.id}')">✕</button></td></tr>`;
+      }).join("")}</tbody></table></div></div>`;
+  }
+  return html;
+}
+
+function importEstoqueFile(input){
+  const file=input.files&&input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:"array"});
+      // Tenta a aba "Produtos" primeiro; senão varre as abas até achar o cabeçalho esperado.
+      const ordem=wb.SheetNames.filter(n=>Domain._norm(n)==="produtos").concat(wb.SheetNames);
+      let parsed=null;
+      for(const n of ordem){
+        const m=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,blankrows:false});
+        const r=Domain.parseEstoqueRows(m);
+        if(!r.erro && r.itens.length){ parsed=r; break; }
+      }
+      if(!parsed){ toast("Não encontrei a aba de produtos com as colunas esperadas (Produto, Custo...).","err","Import"); return; }
+      estoqueImport={ fileName:file.name, itens:Domain.casarEstoque(parsed.itens, S.produtos) };
+      renderConciliacao();
+    }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function salvarEstoqueImport(){
+  const sel=S.concilSemanaSel;
+  if(!estoqueImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
+  const tipo=sv("est-tipo")||"antes";
+  const data=sv("est-data")||new Date().toISOString().slice(0,10);
+  const produtos=estoqueImport.itens.map(i=>({
+    produto_id:i.produto_id, nome:i.nome, estoque_contado:i.estoque_contado,
+    medida:i.medida, quantidade_embalagem:i.quantidade_embalagem, custo:i.custo,
+    departamento:i.departamento, setor:i.setor, estoque_minimo:i.estoque_minimo
+  }));
+  // Reaproveita o doc existente do mesmo (semana, tipo) em vez de duplicar.
+  const existente=S.estoques.find(e=>e.semana_id===sel && e.tipo===tipo);
+  const ok=await FS.save("estoques",{
+    id: existente?existente.id:null,
+    semana_id:sel, tipo, data_contagem:data, mes:mesDeData(data), produtos
+  });
+  if(!ok) return;
+  estoqueImport=null;
+  renderConciliacao();
+  toast(`${produtos.length} itens salvos como estoque ${tipo}.`,"ok","Estoque importado");
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────

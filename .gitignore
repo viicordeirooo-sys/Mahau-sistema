@@ -1,0 +1,9 @@
+# Planilhas de dados (Vercel serve a raiz publicamente — nunca commitar dados reais)
+*.xlsx
+*.xls
+
+# Documento de planejamento interno
+PLANO_TECNICO_CONCILIACAO_MAHAU.md
+
+# Dependências locais e scripts temporários de inspeção
+node_modules/

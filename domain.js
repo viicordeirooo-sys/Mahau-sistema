@@ -125,6 +125,63 @@ const Domain = {
     };
   },
 
+  // ── CONCILIAÇÃO ────────────────────────────────────────────────────────────
+  // Normaliza texto p/ casar nomes/colunas: trim + minúsculo + sem acento + espaços colapsados.
+  _norm(s){ return (s==null?"":String(s)).trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," "); },
+
+  // Parser da planilha de estoque da funcionária (aba "Produtos").
+  // matrix = array-de-arrays (sheet_to_json header:1). Detecta o header dinamicamente.
+  parseEstoqueRows(matrix){
+    const N=Domain._norm;
+    const MAP={ "produto":"nome","departamento":"departamento","setor":"setor",
+      "quantidade":"quantidade_embalagem","medida":"medida",
+      "estoque minimo":"estoque_minimo","estoque atual":"estoque_contado","custo":"custo" };
+    let hRow=-1, col=null;
+    for(let i=0;i<(matrix||[]).length;i++){
+      const cells=(matrix[i]||[]).map(N);
+      if(cells.includes("produto") && (cells.includes("custo")||cells.includes("estoque atual"))){
+        hRow=i; col={}; cells.forEach((c,idx)=>{ if(MAP[c]!==undefined) col[MAP[c]]=idx; }); break;
+      }
+    }
+    if(hRow<0 || !col || col.nome===undefined) return {erro:"Cabeçalho não encontrado (esperado: Produto, Custo, Estoque Atual...).", itens:[]};
+    const num=v=>{ const n=parseFloat(v); return isNaN(n)?0:n; };
+    const txt=v=>(v==null?"":String(v)).trim();
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[];
+      const nome=txt(r[col.nome]);
+      if(!nome) continue;
+      itens.push({
+        nome,
+        departamento: col.departamento!=null?txt(r[col.departamento]):"",
+        setor:        col.setor!=null?txt(r[col.setor]):"",
+        quantidade_embalagem: col.quantidade_embalagem!=null?num(r[col.quantidade_embalagem]):0,
+        medida:       col.medida!=null?txt(r[col.medida]):"",
+        estoque_minimo:  col.estoque_minimo!=null?num(r[col.estoque_minimo]):0,
+        estoque_contado: col.estoque_contado!=null?num(r[col.estoque_contado]):0,
+        custo:        col.custo!=null?num(r[col.custo]):0,
+      });
+    }
+    return {erro:null, headerRow:hRow, itens};
+  },
+
+  // Casa itens parseados com o cadastro `produtos` (por nome normalizado) e marca flags.
+  casarEstoque(itens, produtos){
+    const N=Domain._norm;
+    const byNome={}; (produtos||[]).forEach(p=>{ byNome[N(p.nome)]=p; });
+    return (itens||[]).map(it=>{
+      const p=byNome[N(it.nome)];
+      const custoAnterior=p?(p.preco_compra||0):0;
+      return {...it,
+        produto_id: p?p.id:null,
+        novo: !p,
+        custoAnterior,
+        custoVariou: !!(p && custoAnterior>0 && it.custo>0 && Math.abs(it.custo-custoAnterior)/custoAnterior>0.30),
+        negativo: it.estoque_contado<0,
+      };
+    });
+  },
+
 };
 
 if (typeof module!=='undefined' && module.exports) module.exports = Domain;

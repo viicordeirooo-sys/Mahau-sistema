@@ -1425,7 +1425,7 @@ function mapearNaoMapeado(tipo,i){
   else { const n=r.naoMapeados.nomes[i]; if(n) mapearDoEvento("", n.nome); }
 }
 function mapearDoEvento(sku,nome){
-  mapaForm={id:null, sku_zig:sku||"", nome_zig:nome||"", tipo:"direto", regra_unidade:"un"};
+  mapaForm={id:null, sku_zig:sku||"", nome_zig:nome||"", tipo:"direto", regras_form:[novaRegraForm()]};
   S.concilTab="mapa"; go("concil");
 }
 
@@ -2560,25 +2560,28 @@ function resumoMapa(m){
 
 function mapaFormHTML(){
   const f=mapaForm; if(f===null) return "";
-  const capt="mapaForm.sku_zig=sv('mp-sku');mapaForm.nome_zig=sv('mp-nome');";
+  const prods=S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome));
+  const optProd=sel=>`<option value="">-- selecione --</option>`+prods.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${p.nome}</option>`).join("");
   return `<div class="fb">
     <div class="ft">${f.id?"Editar":"Novo"} Mapeamento<button class="bi" onclick="mapaForm=null;renderConciliacao()">✕</button></div>
     <div class="fg g3">
       <div class="fi"><label>SKU Zig</label><input id="mp-sku" value="${(f.sku_zig||"").replace(/"/g,"&quot;")}"></div>
       <div class="fi"><label>Nome na Zig</label><input id="mp-nome" value="${(f.nome_zig||"").replace(/"/g,"&quot;")}"></div>
-      <div class="fi"><label>Tipo</label><select id="mp-tipo" onchange="${capt}mapaForm.tipo=this.value;renderConciliacao()">
+      <div class="fi"><label>Tipo</label><select id="mp-tipo" onchange="mapaCap();mapaForm.tipo=this.value;renderConciliacao()">
         ${["direto","combo","montavel","ignorar"].map(t=>`<option value="${t}"${f.tipo===t?" selected":""}>${t}</option>`).join("")}
       </select></div>
       <div class="fi"><label>Preço unitário Zig <span style="color:#484f58">(p/ cortesias)</span></label><input id="mp-preco" type="number" step="any" value="${f.preco_zig||""}" placeholder="opcional"></div>
     </div>
-    ${(f.tipo==="direto"||f.tipo==="montavel")?`<div class="fg g3">
-      <div class="fi"><label>Produto que baixa</label><select id="mp-prod">
-        <option value="">-- selecione --</option>
-        ${S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}"${f.regra_produto_id===p.id?" selected":""}>${p.nome}</option>`).join("")}
-      </select></div>
-      <div class="fi"><label>Qtd de baixa / unidade vendida</label><input id="mp-qtd" type="number" step="any" value="${f.regra_qtd||""}"></div>
-      <div class="fi"><label>Unidade</label><select id="mp-un">${["un","ml","g"].map(u=>`<option${(f.regra_unidade||"un")===u?" selected":""}>${u}</option>`).join("")}</select></div>
-    </div>`:""}
+    ${(f.tipo==="direto"||f.tipo==="montavel")?`
+      <div class="fi" style="margin-bottom:6px"><label>Ingredientes que baixam (1 linha por produto)</label></div>
+      ${(f.regras_form||[]).map((r,i)=>`<div class="fg" style="grid-template-columns:2fr 1fr .8fr auto;align-items:end;margin-bottom:6px">
+        <div class="fi"><label>Produto que baixa</label><select id="mp-prod-${i}">${optProd(r.produto_id)}</select></div>
+        <div class="fi"><label>Qtd / un vendida</label><input id="mp-qtd-${i}" type="number" step="any" value="${r.qtd||""}"></div>
+        <div class="fi"><label>Unidade</label><select id="mp-un-${i}">${["un","ml","g"].map(u=>`<option${(r.unidade||"un")===u?" selected":""}>${u}</option>`).join("")}</select></div>
+        ${f.regras_form.length>1?`<button class="bi" onclick="mapaDelRegra(${i})" title="Remover ingrediente">✕</button>`:""}
+      </div>`).join("")}
+      <button class="btn bg_ bsm" onclick="mapaAddRegra()" style="margin-bottom:10px">+ Adicionar ingrediente</button>
+    `:""}
     ${f.tipo==="combo"?`<div class="fg g3">
       <div class="fi"><label>Produto mixer (Red Bull/tônica)</label><select id="mp-mixer">
         <option value="">-- nenhum --</option>
@@ -2592,26 +2595,61 @@ function mapaFormHTML(){
   </div>`;
 }
 
-function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regra_unidade:"un"}; S.concilTab="mapa"; renderConciliacao(); }
+const novaRegraForm=()=>({produto_id:"",qtd:"",unidade:"un"});
+// Captura os campos do form (DOM) de volta para mapaForm antes de qualquer re-render,
+// para não perder o que foi digitado ao adicionar/remover linha ou trocar o tipo.
+function mapaCap(){
+  const f=mapaForm; if(!f) return;
+  if(el("mp-sku")) f.sku_zig=sv("mp-sku");
+  if(el("mp-nome")) f.nome_zig=sv("mp-nome");
+  if(el("mp-preco")) f.preco_zig=nv("mp-preco");
+  if(f.tipo==="direto"||f.tipo==="montavel"){
+    const arr=[];
+    (f.regras_form||[]).forEach((_,i)=>{
+      if(el("mp-prod-"+i)) arr.push({produto_id:sv("mp-prod-"+i), qtd:sv("mp-qtd-"+i), unidade:sv("mp-un-"+i)||"un"});
+    });
+    if(arr.length) f.regras_form=arr;
+  } else if(f.tipo==="combo"){
+    if(el("mp-mixer")) f.mixer_produto_id=sv("mp-mixer");
+    if(el("mp-redbull")) f.redbull_qtd=nv("mp-redbull");
+    if(el("mp-garrafa")) f.garrafa_qtd=nv("mp-garrafa");
+  }
+}
+function mapaAddRegra(){ if(!mapaForm) return; mapaCap(); (mapaForm.regras_form=mapaForm.regras_form||[]).push(novaRegraForm()); renderConciliacao(); }
+function mapaDelRegra(i){ if(!mapaForm) return; mapaCap(); const a=mapaForm.regras_form||[]; if(a.length<=1) return; a.splice(i,1); renderConciliacao(); }
+
+function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regras_form:[novaRegraForm()]}; S.concilTab="mapa"; renderConciliacao(); }
 function editarMapa(id){
   const m=S.mapeamento_zig.find(x=>x.id===id); if(!m) return;
-  const r=(m.regras&&m.regras[0])||{};
+  const rf=(m.regras||[]).filter(r=>r&&r.produto_id)
+    .map(r=>({produto_id:r.produto_id, qtd:(r.quantidade_baixa!=null?String(r.quantidade_baixa):""), unidade:r.unidade||"un"}));
   mapaForm={id:m.id,sku_zig:m.sku_zig,nome_zig:m.nome_zig,tipo:m.tipo||"direto",
-    regra_produto_id:r.produto_id,regra_qtd:r.quantidade_baixa,regra_unidade:r.unidade||"un",
+    regras_form: rf.length?rf:[novaRegraForm()],
     garrafa_qtd:m.garrafa_qtd,redbull_qtd:m.redbull_qtd,
     preco_zig:m.preco_zig,mixer_produto_id:m.mixer_produto_id};
   renderConciliacao();
 }
 function salvarMapa(){
   const f=mapaForm; if(!f) return;
+  mapaCap();
   const sku=sv("mp-sku").trim(), nome=sv("mp-nome").trim(), tipo=sv("mp-tipo");
   if(!validar([[sku,"Informe o SKU da Zig."],[tipo,"Escolha o tipo."]])) return;
   const doc={id:f.id||null, sku_zig:sku, nome_zig:nome, tipo, ativo:true, regras:[], redbull_qtd:0, garrafa_qtd:0,
     preco_zig:nv("mp-preco")||0, mixer_produto_id:"", mixer_nome:""};
   if(tipo==="direto"||tipo==="montavel"){
-    const pid=sv("mp-prod"), p=S.produtos.find(x=>x.id===pid), qtd=nv("mp-qtd"), un=sv("mp-un")||"un";
-    if(!validar([[pid,"Selecione o produto que baixa."],[qtd>0,"A quantidade de baixa deve ser maior que zero."]])) return;
-    doc.regras=[{produto_id:pid, nome_produto:p?p.nome:"", quantidade_baixa:qtd, unidade:un, fonte:tipo==="montavel"?"montavel":"hardcoded"}];
+    const fonte=tipo==="montavel"?"montavel":"hardcoded";
+    const linhas=(f.regras_form||[]).filter(r=>(r.produto_id||"").trim() || String(r.qtd||"").trim());
+    if(!validar([[linhas.length>0,"Adicione pelo menos 1 ingrediente que baixa."]])) return;
+    const regras=[], vistos=new Set();
+    for(const r of linhas){
+      const pid=(r.produto_id||"").trim(), qtd=parseFloat(r.qtd), un=r.unidade||"un";
+      const p=S.produtos.find(x=>x.id===pid);
+      if(!validar([[pid,"Selecione o produto em todas as linhas de ingrediente."],[qtd>0,"A quantidade de baixa deve ser maior que zero em todas as linhas."]])) return;
+      if(vistos.has(pid)){ toast("Produto repetido nos ingredientes: "+(p?p.nome:pid)+". Some as quantidades numa linha só.","err","Ingrediente duplicado"); return; }
+      vistos.add(pid);
+      regras.push({produto_id:pid, nome_produto:p?p.nome:"", quantidade_baixa:qtd, unidade:un, fonte});
+    }
+    doc.regras=regras;
   } else if(tipo==="combo"){
     const mid=sv("mp-mixer"), mp=S.produtos.find(x=>x.id===mid);
     doc.garrafa_qtd=nv("mp-garrafa"); doc.redbull_qtd=nv("mp-redbull");

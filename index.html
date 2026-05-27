@@ -2554,7 +2554,9 @@ async function salvarEstornos(){
 function resumoMapa(m){
   if(m.tipo==="ignorar") return "ignorado";
   if(m.tipo==="combo") return `${m.redbull_qtd||0}× ${m.mixer_nome||"mixer?"} (garrafa via montável)`;
-  const r=(m.regras&&m.regras[0]);
+  const rs=(m.regras||[]).filter(r=>r&&r.produto_id);
+  if(rs.length>1) return `${rs.length} ingredientes`;
+  const r=rs[0];
   return r?`→ ${r.nome_produto||r.produto_id||"?"} (${r.quantidade_baixa} ${r.unidade})`:"—";
 }
 

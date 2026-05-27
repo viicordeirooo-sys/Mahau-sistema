@@ -380,7 +380,7 @@ const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
   custos:[],inventarios:[],inventarios_mensais:[],
-  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[], // módulo Conciliação
+  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[], // módulo Conciliação
   config:{datasNoMes:4},
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null,  // null = todos os meses
@@ -1849,6 +1849,7 @@ const LIXEIRA_COLS=[
   {col:"semanas_conciliacao", label:"Semanas de Conciliação"},
   {col:"estoques",        label:"Estoques (conciliação)"},
   {col:"vendas_zig",     label:"Vendas Zig"},
+  {col:"cortesias_semana", label:"Cortesias (conciliação)"},
   {col:"mapeamento_zig",  label:"Mapeamentos Zig"},
 ];
 function descreveDoc(col,d){
@@ -1861,6 +1862,7 @@ function descreveDoc(col,d){
     case "semanas_conciliacao": return `${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "estoques": return `Estoque ${d.tipo||""} · ${fmtData(d.data_contagem)}`;
     case "vendas_zig": return `Saída ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
+    case "cortesias_semana": return `Cortesias ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "mapeamento_zig": return `${d.sku_zig||""} · ${d.nome_zig||""}`;
     default: return d.id||"";
   }
@@ -1898,10 +1900,12 @@ const CONCIL_TABS=[
   {id:"semanas", label:"📆 Semanas"},
   {id:"estoque", label:"📦 Estoque"},
   {id:"vendas",  label:"📊 Saída Zig"},
+  {id:"cortesias", label:"🎁 Cortesias"},
   {id:"mapa",    label:"🔗 Mapeamento"},
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
 let vendasZigImport=null; // preview do import de VENDAS Zig (produtos vendidos+montáveis) p/ conciliação de estoque — NÃO é o evento financeiro
+let cortesiasImport=null; // preview do import de cortesias (Bonificação por produto) p/ conciliação
 let mapaForm=null; // formulário de mapeamento Zig→Estoque em edição
 let concilMapaQ=""; // busca da lista de SKUs não mapeados
 
@@ -1913,6 +1917,7 @@ function renderConciliacao(){
   const corpo = tab==="semanas" ? concilSemanasHTML()
     : tab==="estoque" ? concilEstoqueHTML()
     : tab==="vendas" ? concilVendasHTML()
+    : tab==="cortesias" ? concilCortesiasHTML()
     : concilMapaHTML();
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
@@ -2198,6 +2203,90 @@ async function salvarVendasZig(){
   toast(`Saída da semana salva (${n} SKUs).`,"ok","Saída importada");
 }
 
+// ── Conciliação · aba Cortesias (2b) ──────────────────────────────────────────
+// Um arquivo por semana (substitui o anterior). Doc: {semana_id, periodo_inicio,
+// periodo_fim, itens:[{promoter, produto, categoria, valor_brl, valor_outro_periodo}]}.
+// Bonificações/cortesias da Zig — alimentam o consumo gratuito no motor (Sprint 2 · 2d/2e).
+function concilCortesiasHTML(){
+  const sel=S.concilSemanaSel;
+  if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para importar as cortesias.</div>`;
+  const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
+  const imp=cortesiasImport;
+  let html=`<div class="fb">
+    <div class="ft">Importar Cortesias (Zig) — semana ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX da <strong>Bonificação por produto</strong> (cortesias consolidadas da semana). Um arquivo por semana: reimportar <strong>substitui</strong> o anterior.</div>
+    <input type="file" id="cort-file" accept=".xlsx,.xls" onchange="importCortesiasFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+  </div>`;
+  if(imp){
+    const totalBrl=imp.itens.reduce((a,x)=>a+(x.valor_brl||0),0);
+    const proms=new Set(imp.itens.map(x=>x.promoter).filter(Boolean)).size;
+    html+=`<div class="kpis">
+      ${kpi("Linhas lidas",imp.itens.length+"",imp.fileName,"#e6edf3","#2563eb")}
+      ${kpi("Total cortesias",R(totalBrl),"bonificação no período","#e6edf3","#8b5cf6")}
+      ${kpi("Promoters",proms+"","grupos distintos","#e6edf3","#22c55e")}
+      ${kpi("Período (do arquivo)",imp.periodo.inicio?fmtData(imp.periodo.inicio)+" → "+fmtData(imp.periodo.fim):"—","detectado no título","#e6edf3","#22c55e")}
+    </div>
+    <div class="fb"><div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn bg_" onclick="cortesiasImport=null;renderConciliacao()">✕ Descartar</button>
+      <button class="btn bp" onclick="salvarCortesias()">💾 Salvar Cortesias da Semana</button>
+    </div></div>
+    <div class="box">
+      <div class="bh"><span class="bt">Preview — ${imp.itens.length} linhas (por valor)</span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Promoter</th><th>Produto</th><th>Categoria</th><th class="r">Valor</th></tr></thead>
+        <tbody>${imp.itens.slice().sort((a,b)=>(b.valor_brl||0)-(a.valor_brl||0)).map(v=>`<tr>
+          <td class="mt">${v.promoter||""}</td><td class="w6">${v.produto||""}</td><td class="mt">${v.categoria||""}</td><td class="r mn">${Rf(v.valor_brl||0)}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`;
+  }
+  const doc=S.cortesias_semana.find(e=>e.semana_id===sel);
+  if(doc){
+    const totalBrl=(doc.itens||[]).reduce((a,v)=>a+(v.valor_brl||0),0);
+    html+=`<div class="box"><div class="bh"><span class="bt">Cortesias salvas desta semana</span></div>
+      <div class="tw"><table><thead><tr><th>Período</th><th class="r">Linhas</th><th class="r">Valor</th><th></th></tr></thead>
+      <tbody><tr>
+        <td class="mn">${fmtData(doc.periodo_inicio)} → ${fmtData(doc.periodo_fim)}</td>
+        <td class="r">${(doc.itens||[]).length}</td><td class="r mn">${R(totalBrl)}</td>
+        <td><button class="bi" onclick="softDel('cortesias_semana','${doc.id}')">✕</button></td>
+      </tr></tbody></table></div></div>`;
+  }
+  return html;
+}
+
+function importCortesiasFile(input){
+  const file=input.files&&input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:"array"});
+      const N=Domain._norm, toM=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,blankrows:false});
+      let mat=null;
+      for(const n of wb.SheetNames.filter(n=>N(n).includes("bonifica")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseCortesias(m).erro){ mat=m; break; } }
+      if(!mat){ toast("Não encontrei a aba de Bonificação por produto (Produto + Bonificação recebida durante o período).","err","Import"); return; }
+      cortesiasImport={ fileName:file.name, periodo:Domain.extrairPeriodoCortesias(mat), itens:Domain.parseCortesias(mat).itens };
+      renderConciliacao();
+    }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function salvarCortesias(){
+  const sel=S.concilSemanaSel;
+  if(!cortesiasImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
+  const per=cortesiasImport.periodo||{}, n=cortesiasImport.itens.length;
+  // Um arquivo por semana → substitui o doc anterior da semana (reusa o id).
+  const existente=S.cortesias_semana.find(e=>e.semana_id===sel);
+  const ok=await FS.save("cortesias_semana",{
+    id: existente?existente.id:null, semana_id:sel,
+    periodo_inicio:per.inicio||"", periodo_fim:per.fim||"", mes:mesDeData(per.inicio||""),
+    itens:cortesiasImport.itens
+  });
+  if(!ok) return;
+  cortesiasImport=null; renderConciliacao();
+  toast(`Cortesias da semana salvas (${n} linhas).`,"ok","Cortesias importadas");
+}
+
 // ── Conciliação · aba Mapeamento Zig→Estoque (1d) ─────────────────────────────
 function resumoMapa(m){
   if(m.tipo==="ignorar") return "ignorado";
@@ -2304,7 +2393,7 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig"];
+  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana"];
   const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
@@ -2326,7 +2415,7 @@ function unbindData(){
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
   S.custos=[];S.inventarios=[];S.inventarios_mensais=[];
-  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S._trash={};
+  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S.cortesias_semana=[];S._trash={};
 }
 
 function showLogin(){

@@ -3032,6 +3032,20 @@ function showLogin(){
   setTimeout(()=>el("login-email")?.focus(),50);
 }
 
+// Tela de erro travada (auth indisponível). NÃO chama bindData nem mostra o app —
+// defense in depth: sem auth confirmada, nada de Firestore, não confia só nas rules.
+function showAuthError(msg){
+  const scr=el("login-screen");
+  if(scr){
+    scr.classList.remove("hidden");
+    scr.innerHTML=`<div class="login-box">
+      <div class="login-logo">Mahau</div>
+      <div class="login-tag">SISTEMA FINANCEIRO</div>
+      <div class="login-err" style="font-size:13px;min-height:0">${msg}</div>
+    </div>`;
+  } else { alert(msg); }
+}
+
 function showApp(user){
   el("login-screen")?.classList.add("hidden");
   const box=el("sb-auth");
@@ -3084,9 +3098,8 @@ function init(){
       else    { unbindData(); showLogin(); }
     });
   } else {
-    // Firebase/Auth indisponível — modo degradado, sem login (comportamento anterior)
-    el("login-screen")?.classList.add("hidden");
-    bindData();
+    // Firebase/Auth indisponível — bloqueia o acesso. Sem auth, NUNCA bindData().
+    showAuthError("Erro: Autenticação indisponível. Verifique sua conexão e recarregue a página.");
   }
 }
 init();

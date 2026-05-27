@@ -1038,6 +1038,10 @@ function renderCatalogoImport(){
       ${kpi("Custo +30%",varc+"",varc?"conferir":"ok",varc?"#f59e0b":"#22c55e",varc?"#f59e0b":"#22c55e")}
     </div>
     ${negs?`<div class="alert-strip">⚠ ${negs} item(ns) com estoque negativo no arquivo — conferir.</div>`:""}
+    <div class="lc-strip" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:#3b82f6">📋 ${novos} novo(s) serão criados · ${atualiza} atualizado(s). O <strong>estoque inicial</strong> de cada produto será redefinido pela contagem do arquivo.</span>
+      <button class="btn bp" onclick="salvarCatalogo()">💾 Salvar no catálogo (${imp.itens.length})</button>
+    </div>
     <div class="box">
       <div class="bh"><span class="bt">Preview — ${imp.itens.length} itens</span><button class="btn bg_ bsm" onclick="catalogoImport=null;renderEstoque()">✕ Descartar</button></div>
       <div class="tw"><table>
@@ -1076,6 +1080,41 @@ function importCatalogoFile(input){
     }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// Upsert do catálogo `produtos` a partir do XLSX (em lote). Diferente do antigo
+// cadastrarProdutosDoEstoque: redefine `estoque_inicial` em TODOS (novos e existentes),
+// pois a planilha é o "ponto zero" do estoque. Preserva `preco_venda` (merge). Re-casa
+// com S.produtos na hora p/ não duplicar em reimports.
+async function salvarCatalogo(){
+  if(!catalogoImport){ toast("Importe um arquivo primeiro.","err"); return; }
+  if(!db){ toast("Banco indisponível.","err"); return; }
+  const itens=Domain.casarEstoque(catalogoImport.itens, S.produtos);
+  if(!confirm(`Salvar ${itens.length} produtos no catálogo? Atualiza custo, categoria, unidade e mínimo, e redefine o estoque inicial de cada um pela contagem do arquivo.`)) return;
+  try{
+    const ts=firebase.firestore.FieldValue.serverTimestamp();
+    let criados=0, atualizados=0;
+    for(let i=0;i<itens.length;i+=400){
+      const batch=db.batch();
+      itens.slice(i,i+400).forEach(it=>{
+        const base={ nome:it.nome, categoria:it.setor||it.departamento||"", unidade:it.medida||"un",
+          capacidade_ml:it.quantidade_embalagem||0, preco_compra:it.custo||0, estoque_min:it.estoque_minimo||0,
+          estoque_inicial:it.estoque_contado||0 };
+        if(it.produto_id){ // existente → atualiza (inclui estoque_inicial), preserva preco_venda
+          batch.set(db.collection("produtos").doc(String(it.produto_id)), {...base, updatedAt:ts}, {merge:true});
+          atualizados++;
+        } else { // novo → cria com estoque_inicial = contagem
+          const ref=db.collection("produtos").doc();
+          batch.set(ref, Domain.camposCriacao({...base, id:ref.id}, ts));
+          criados++;
+        }
+      });
+      await batch.commit();
+    }
+    catalogoImport=null;
+    renderEstoque();
+    toast(`Catálogo: ${criados} criado(s), ${atualizados} atualizado(s).`,"ok","Produtos");
+  }catch(e){ toast(FS._msg(e),"err","Falha ao salvar catálogo"); }
 }
 
 

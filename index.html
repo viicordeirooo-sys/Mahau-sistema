@@ -971,8 +971,12 @@ function renderEstoque(){
   set("p-estoque",`
     <div class="pg-h">
       <div><div class="eyebrow">SALDO ATUAL</div><div class="pg-t">Estoque</div></div>
-      <button class="btn bg_" onclick="showListaCompras=!showListaCompras;renderEstoque()">📋 Lista de Compras</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn bg_" onclick="showCatalogoImport=!showCatalogoImport;renderEstoque()">📋 Importar planilha de produtos</button>
+        <button class="btn bg_" onclick="showListaCompras=!showListaCompras;renderEstoque()">📋 Lista de Compras</button>
+      </div>
     </div>
+    <div id="catalogo-import-container"></div>
     <div id="lista-compras-container"></div>
     <div class="kpis">
       ${kpi("Produtos Cadastrados",S.produtos.length,"","#e6edf3","#2563eb")}
@@ -1007,7 +1011,71 @@ function renderEstoque(){
       </table></div>
     </div>
   `);
+  if(showCatalogoImport) renderCatalogoImport();
   if(showListaCompras) renderListaCompras();
+}
+
+// ── IMPORT DE CATÁLOGO (página Estoque) ───────────────────────────────────────
+// Cadastra produtos novos e atualiza o catálogo a partir do XLSX da planilha de
+// produtos, separado da Conciliação: NÃO cria semana nem snapshot em `estoques`.
+let showCatalogoImport=false;   // painel de import de catálogo aberto na página Estoque
+let catalogoImport=null;        // preview do import (itens casados), antes de salvar
+
+function renderCatalogoImport(){
+  const imp=catalogoImport;
+  let html=`<div class="fb">
+    <div class="ft">📋 Importar planilha de produtos (XLSX)<button class="bi" onclick="showCatalogoImport=false;catalogoImport=null;renderEstoque()">✕</button></div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">Envie o XLSX da planilha de produtos (aba "Produtos") para <strong>cadastrar produtos novos</strong> e <strong>atualizar o catálogo</strong> (custo, categoria, unidade, mínimo) e o <strong>estoque inicial</strong> de cada produto. Não cria semana de conciliação nem snapshot.</div>
+    <input type="file" id="cat-file" accept=".xlsx,.xls" onchange="importCatalogoFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+  </div>`;
+  if(imp){
+    const novos=imp.itens.filter(i=>i.novo).length, atualiza=imp.itens.length-novos;
+    const varc=imp.itens.filter(i=>i.custoVariou).length, negs=imp.itens.filter(i=>i.negativo).length;
+    html+=`<div class="kpis">
+      ${kpi("Itens lidos",imp.itens.length+"",imp.fileName,"#e6edf3","#2563eb")}
+      ${kpi("Novos (s/ cadastro)",novos+"",novos?"serão criados":"nenhum",novos?"#f59e0b":"#22c55e",novos?"#f59e0b":"#22c55e")}
+      ${kpi("Já cadastrados",atualiza+"","serão atualizados","#e6edf3","#8b5cf6")}
+      ${kpi("Custo +30%",varc+"",varc?"conferir":"ok",varc?"#f59e0b":"#22c55e",varc?"#f59e0b":"#22c55e")}
+    </div>
+    ${negs?`<div class="alert-strip">⚠ ${negs} item(ns) com estoque negativo no arquivo — conferir.</div>`:""}
+    <div class="box">
+      <div class="bh"><span class="bt">Preview — ${imp.itens.length} itens</span><button class="btn bg_ bsm" onclick="catalogoImport=null;renderEstoque()">✕ Descartar</button></div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th>Dep.</th><th class="r">Contado</th><th>Medida</th><th class="r">Custo</th><th>Situação</th></tr></thead>
+        <tbody>${imp.itens.map(i=>`<tr style="${i.novo?"background:rgba(245,158,11,.05)":i.negativo?"background:rgba(239,68,68,.05)":""}">
+          <td class="w6">${i.nome}</td>
+          <td class="mt" style="font-size:10px">${i.departamento||""}</td>
+          <td class="r mn">${i.estoque_contado}</td>
+          <td class="mt">${i.medida||""}</td>
+          <td class="r mn">${i.custo?Rf(i.custo):"—"}</td>
+          <td>${i.novo?chip("novo","#f59e0b"):chip("atualiza","#2563eb")}${i.custoVariou?chip("custo↑","#f59e0b"):""}${i.negativo?chip("negativo","#ef4444"):""}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`;
+  }
+  set("catalogo-import-container", html);
+}
+
+function importCatalogoFile(input){
+  const file=input.files&&input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:"array"});
+      // Tenta a aba "Produtos" primeiro; senão varre as abas até achar o cabeçalho esperado.
+      const ordem=wb.SheetNames.filter(n=>Domain._norm(n)==="produtos").concat(wb.SheetNames);
+      let parsed=null;
+      for(const n of ordem){
+        const m=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,blankrows:false});
+        const r=Domain.parseEstoqueRows(m);
+        if(!r.erro && r.itens.length){ parsed=r; break; }
+      }
+      if(!parsed){ toast("Não encontrei a aba de produtos com as colunas esperadas (Produto, Custo...).","err","Import"); return; }
+      catalogoImport={ fileName:file.name, itens:Domain.casarEstoque(parsed.itens, S.produtos) };
+      renderEstoque();
+    }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 

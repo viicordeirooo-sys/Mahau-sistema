@@ -475,7 +475,12 @@ function estoqueIndex(){
   if(_estoqueIdx) return _estoqueIdx;
   const contagens=[...S.inventarios,...S.inventarios_mensais].map(i=>({createdAtMs:tsMs(i.createdAt),contagens:i.contagens||{}}));
   const compras=S.compras.map(c=>({produto_id:c.produto_id,qtd:c.qtd||0,createdAtMs:tsMs(c.createdAt)}));
-  return (_estoqueIdx = Domain.estoqueIndex(S.produtos, compras, contagens));
+  // Baixas de venda do import Zig por evento (zig_baixas = {produto_id: unidades}).
+  // Timing pelo createdAt do evento, igual às compras (subtrai só as posteriores à última contagem).
+  const baixas=[];
+  S.eventos.forEach(e=>{ const b=e.zig_baixas; if(!b) return; const ms=tsMs(e.createdAt);
+    Object.entries(b).forEach(([pid,un])=>baixas.push({produto_id:pid, unidades:un||0, createdAtMs:ms})); });
+  return (_estoqueIdx = Domain.estoqueIndex(S.produtos, compras, contagens, baixas));
 }
 function estoqueAtual(pid){ return Domain.estoqueAtualFrom(S.produtos.find(x=>x.id===pid), estoqueIndex()); }
 function calcEv(e){ return Domain.calcEv(e, rateio()); }
@@ -1221,6 +1226,7 @@ function renderEventos(){
       <div class="ech">
         ${chip("Margem "+P(Math.max(0,e.mg)),e.mg>0.20?"#22c55e":e.mg>0.10?"#f59e0b":"#ef4444")}
         ${e.caixinha?chip("Caixinha "+R(e.caixinha),"#8b5cf6"):""}
+        ${e.zig_importado_em?chip("📥 Estoque baixado","#2563eb"):""}
         <div style="margin-left:auto;display:flex;gap:5px">
           <button class="btn bg_ bsm" onclick="event.stopPropagation();evForm={...S.eventos.find(x=>x.id==='${e.id}')};renderEventos()">✏</button>
           <button class="btn bd_ bsm" onclick="event.stopPropagation();softDelEvento('${e.id}')">✕</button>
@@ -1274,14 +1280,20 @@ function renderDRE(e){
 }
 
 // ── Import "total-produtos-vendidos" da Zig → baixa de estoque do evento (Sprint 3) ──
-// Preview de validação: lê as 2 abas (Vendidos + Montáveis) e mostra o que VAI baixar.
-// A baixa em si (gravar no evento + ligar no estoqueAtual) entra na etapa 3c.
+// Lê as 2 abas (Vendidos + Montáveis), mostra o que vai baixar e aplica no estoqueAtual.
+function fmtDT(iso){ try{ return new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso||""; } }
+
 function importVendidosHTML(ev){
   const imp=(prodVendidosImport && prodVendidosImport.evento_id===ev.id)?prodVendidosImport:null;
+  const jaImportado=!!ev.zig_importado_em;
   let html=`<div class="fb">
     <div class="ft">📥 Importar produtos vendidos da Zig — ${ev.nome||""} · ${fmtData(ev.data)}</div>
     <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX <strong>"total-produtos-vendidos"</strong> da Zig (do dia do evento). Só <strong>baixa o estoque</strong> via mapeamento — não mexe em faturamento/porta/caixinha. Nos combos, a garrafa e os mixers reais vêm da aba <em>Montáveis</em>.</div>
     <input type="file" id="ev-zig-file" accept=".xlsx,.xls" onchange="importProdVendidosFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+    ${jaImportado?`<div class="alert-strip" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);color:#22c55e;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <span>✓ Baixa aplicada em <strong>${fmtDT(ev.zig_importado_em)}</strong>${ev.zig_arquivo_nome?" · "+ev.zig_arquivo_nome:""} · ${ev.zig_total_itens||0} itens · ${Object.keys(ev.zig_baixas||{}).length} produtos no estoque</span>
+      <button class="btn bd_ bsm" onclick="removerBaixaEvento('${ev.id}')">Remover baixa</button>
+    </div>`:""}
   </div>`;
   if(!imp) return html;
 
@@ -1295,6 +1307,14 @@ function importVendidosHTML(ev){
     ${kpi("Linhas montáveis",imp.montaveis.length+"","garrafas/mixers/itens","#e6edf3","#f59e0b")}
     ${kpi("Produtos que baixam",linhas.length+"","no estoque","#e6edf3","#22c55e")}
   </div>`;
+
+  const faltamPreco=precosFaltantes(imp);
+  if(faltamPreco.length){
+    html+=`<div class="fb" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:#8b949e">${faltamPreco.length} mapeamento(s) sem preço Zig — o arquivo tem o valor unitário desses SKUs (ajuda nas cortesias da Conciliação).</span>
+      <button class="btn bg_ bsm" onclick="preencherPrecosZig()">Preencher preços faltantes</button>
+    </div>`;
+  }
 
   const nm=r.naoMapeados;
   if(nm.skus.length||nm.nomes.length){
@@ -1314,11 +1334,58 @@ function importVendidosHTML(ev){
     ${linhas.length?linhas.map(l=>`<tr><td class="w6">${l.nome}</td><td class="r mn">${fmtU(l.un)}</td></tr>`).join(""):`<tr><td colspan="2"><div class="empty">Nada a baixar — mapeie os itens acima.</div></td></tr>`}
     </tbody></table></div></div>`;
 
-  html+=`<div class="fb"><div style="font-size:11px;color:#8b949e;margin-bottom:8px">Confira a baixa acima. <strong>Aplicar no estoque</strong> entra na próxima etapa — por enquanto este é o preview de validação.</div>
+  html+=`<div class="fb">
+    ${jaImportado?`<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Este evento já teve baixa aplicada. <strong>Aplicar de novo substitui</strong> a anterior — o estoque é recalculado do zero (sem dupla baixa).</div>`:""}
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn bg_" onclick="prodVendidosImport=null;renderEventos()">✕ Descartar</button>
+      <button class="btn bp" onclick="aplicarBaixaEvento()"${linhas.length?"":" disabled style=\"opacity:.5;cursor:not-allowed\""}>✓ ${jaImportado?"Substituir baixa":"Aplicar baixa no estoque"}</button>
     </div></div>`;
   return html;
+}
+
+// Mapeamentos com SKU presente no arquivo (com valor unitário) mas sem preco_zig ainda.
+function precosFaltantes(imp){
+  const bySku={}; (imp.vendidos||[]).forEach(v=>{ if(v.sku && v.valor_unitario>0 && bySku[v.sku]===undefined) bySku[v.sku]=v.valor_unitario; });
+  return S.mapeamento_zig.filter(m=>m.sku_zig && bySku[m.sku_zig]!==undefined && !(m.preco_zig>0))
+    .map(m=>({id:m.id, preco:bySku[m.sku_zig]}));
+}
+async function preencherPrecosZig(){
+  const imp=prodVendidosImport; if(!imp) return;
+  const faltam=precosFaltantes(imp);
+  if(!faltam.length){ toast("Nenhum preço faltante para preencher.","info"); return; }
+  let n=0;
+  for(const f of faltam){ const ok=await FS.save("mapeamento_zig",{id:f.id, preco_zig:f.preco}); if(ok) n++; }
+  toast(`${n} preço(s) Zig preenchidos a partir do arquivo.`,"ok","Preços atualizados");
+  renderEventos();
+}
+
+// Aplica a baixa: grava zig_baixas (agregado) + metadados no doc do evento (merge, reusa o id).
+// Reimportar SUBSTITUI: o estoqueIndex deriva sempre do zig_baixas atual, então sobrescrever
+// reverte+aplica de uma vez (sem dupla baixa).
+async function aplicarBaixaEvento(){
+  const imp=prodVendidosImport; if(!imp) return;
+  const ev=S.eventos.find(e=>e.id===imp.evento_id);
+  if(!ev){ toast("Evento não encontrado.","err"); return; }
+  const r=Domain.baixaEvento({vendidos:imp.vendidos, montaveis:imp.montaveis, mapeamentos:S.mapeamento_zig, produtos:S.produtos});
+  if(!Object.keys(r.baixas).length){ toast("Nada a baixar — mapeie os itens primeiro.","err"); return; }
+  const ok=await FS.save("eventos",{
+    id:ev.id,
+    zig_baixas:r.baixas,
+    zig_importado_em:new Date().toISOString(),
+    zig_arquivo_nome:imp.fileName||"",
+    zig_total_itens:r.total_itens
+  });
+  if(!ok) return;
+  prodVendidosImport=null; renderEventos();
+  toast(`Baixa aplicada: ${Object.keys(r.baixas).length} produto(s) descontados do estoque.`,"ok","Estoque atualizado");
+}
+async function removerBaixaEvento(id){
+  const ev=S.eventos.find(e=>e.id===id); if(!ev) return;
+  if(!confirm(`Remover a baixa de estoque importada de "${ev.nome||"evento"}"? O estoque volta a desconsiderar essas vendas.`)) return;
+  const ok=await FS.save("eventos",{id, zig_baixas:{}, zig_importado_em:"", zig_arquivo_nome:"", zig_total_itens:0});
+  if(!ok) return;
+  renderEventos();
+  toast("Baixa removida — estoque recalculado.","ok");
 }
 
 function importProdVendidosFile(input){
@@ -2761,7 +2828,7 @@ function bindData(){
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
   const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana","conciliacoes"];
-  const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais"]);
+  const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais","eventos"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
       S[col]=d.filter(x=>!x.deletedAt);

@@ -380,7 +380,7 @@ const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
   custos:[],inventarios:[],inventarios_mensais:[],
-  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[], // módulo Conciliação
+  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[],estornos_semana:[], // módulo Conciliação
   config:{datasNoMes:4},
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null,  // null = todos os meses
@@ -1850,6 +1850,7 @@ const LIXEIRA_COLS=[
   {col:"estoques",        label:"Estoques (conciliação)"},
   {col:"vendas_zig",     label:"Vendas Zig"},
   {col:"cortesias_semana", label:"Cortesias (conciliação)"},
+  {col:"estornos_semana", label:"Estornos (conciliação)"},
   {col:"mapeamento_zig",  label:"Mapeamentos Zig"},
 ];
 function descreveDoc(col,d){
@@ -1863,6 +1864,7 @@ function descreveDoc(col,d){
     case "estoques": return `Estoque ${d.tipo||""} · ${fmtData(d.data_contagem)}`;
     case "vendas_zig": return `Saída ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "cortesias_semana": return `Cortesias ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
+    case "estornos_semana": return `Estornos ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "mapeamento_zig": return `${d.sku_zig||""} · ${d.nome_zig||""}`;
     default: return d.id||"";
   }
@@ -1901,11 +1903,14 @@ const CONCIL_TABS=[
   {id:"estoque", label:"📦 Estoque"},
   {id:"vendas",  label:"📊 Saída Zig"},
   {id:"cortesias", label:"🎁 Cortesias"},
+  {id:"estornos", label:"↩️ Estornos"},
   {id:"mapa",    label:"🔗 Mapeamento"},
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
 let vendasZigImport=null; // preview do import de VENDAS Zig (produtos vendidos+montáveis) p/ conciliação de estoque — NÃO é o evento financeiro
 let cortesiasImport=null; // preview do import de cortesias (Bonificação por produto) p/ conciliação
+let estornosImport=null; // preview do import de estornos/cancelados p/ conciliação
+let concilEstornoView="estornado"; // sub-aba visual do preview de estornos: "estornado" | "cancelado"
 let mapaForm=null; // formulário de mapeamento Zig→Estoque em edição
 let concilMapaQ=""; // busca da lista de SKUs não mapeados
 
@@ -1918,6 +1923,7 @@ function renderConciliacao(){
     : tab==="estoque" ? concilEstoqueHTML()
     : tab==="vendas" ? concilVendasHTML()
     : tab==="cortesias" ? concilCortesiasHTML()
+    : tab==="estornos" ? concilEstornosHTML()
     : concilMapaHTML();
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
@@ -2287,6 +2293,101 @@ async function salvarCortesias(){
   toast(`Cortesias da semana salvas (${n} linhas).`,"ok","Cortesias importadas");
 }
 
+// ── Conciliação · aba Estornos (2c) ───────────────────────────────────────────
+// Um arquivo por semana (substitui o anterior). Doc: {semana_id, periodo_inicio,
+// periodo_fim, itens:[{data, produto, categoria, tipo, motivo, quantidade, valor}]}.
+// ⚠️ Só tipo "Estornado" devolve produto ao estoque (motor 2d). "Cancelado" = produto
+// saiu mesmo (foi relançado com desconto) → fica só informativo.
+function concilEstornosHTML(){
+  const sel=S.concilSemanaSel;
+  if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para importar os estornos.</div>`;
+  const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
+  const N=Domain._norm, isEst=x=>N(x.tipo)==="estornado", isCan=x=>N(x.tipo)==="cancelado";
+  const imp=estornosImport;
+  let html=`<div class="fb">
+    <div class="ft">Importar Estornos/Cancelados (Zig) — semana ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX de <strong>Produtos estornados/cancelados</strong>. Só <strong>Estornado</strong> devolve ao estoque; <strong>Cancelado</strong> = produto saiu mesmo (relançado). Um arquivo por semana: reimportar <strong>substitui</strong> o anterior.</div>
+    <input type="file" id="estn-file" accept=".xlsx,.xls" onchange="importEstornosFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+  </div>`;
+  if(imp){
+    const ests=imp.itens.filter(isEst), cans=imp.itens.filter(isCan);
+    const qE=ests.reduce((a,x)=>a+(x.quantidade||0),0), vE=ests.reduce((a,x)=>a+(x.valor||0),0);
+    const qC=cans.reduce((a,x)=>a+(x.quantidade||0),0);
+    html+=`<div class="kpis">
+      ${kpi("Estornados",ests.length+"",qE+" un · volta ao estoque","#22c55e","#22c55e")}
+      ${kpi("Cancelados",cans.length+"",qC+" un · produto saiu","#f59e0b","#f59e0b")}
+      ${kpi("Valor estornado",R(vE),"devolve ao estoque","#e6edf3","#22c55e")}
+      ${kpi("Período (do arquivo)",imp.periodo.inicio?fmtData(imp.periodo.inicio)+" → "+fmtData(imp.periodo.fim):"—","detectado no título","#e6edf3","#2563eb")}
+    </div>
+    <div class="fb"><div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn bg_" onclick="estornosImport=null;renderConciliacao()">✕ Descartar</button>
+      <button class="btn bp" onclick="salvarEstornos()">💾 Salvar Estornos da Semana</button>
+    </div></div>`;
+    const view=concilEstornoView==="cancelado"?"cancelado":"estornado";
+    const lista=view==="cancelado"?cans:ests;
+    html+=`<div class="box">
+      <div class="bh" style="gap:8px;flex-wrap:wrap">
+        <div class="pills">
+          <button class="pill${view==="estornado"?" on":""}" onclick="concilEstornoView='estornado';renderConciliacao()">↩️ Estornados (${ests.length})</button>
+          <button class="pill${view==="cancelado"?" on":""}" onclick="concilEstornoView='cancelado';renderConciliacao()">🚫 Cancelados (${cans.length})</button>
+        </div>
+        ${view==="estornado"?chip("volta ao estoque","#22c55e"):chip("produto saiu mesmo","#6b7280")}
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>Data</th><th>Produto</th><th>Categoria</th><th>Motivo</th><th class="r">Qtd</th><th class="r">Valor</th></tr></thead>
+        <tbody>${lista.length?lista.slice().sort((a,b)=>(b.valor||0)-(a.valor||0)).map(v=>`<tr>
+          <td class="mn mt">${fmtData(v.data)}</td><td class="w6">${v.produto||""}</td><td class="mt">${v.categoria||""}</td><td class="mt" style="font-size:10px">${v.motivo||""}</td><td class="r mn">${v.quantidade||0}</td><td class="r mn">${Rf(v.valor||0)}</td>
+        </tr>`).join(""):`<tr><td colspan="6" class="empty">Nenhum ${view==="cancelado"?"cancelado":"estornado"}.</td></tr>`}</tbody>
+      </table></div>
+    </div>`;
+  }
+  const doc=S.estornos_semana.find(e=>e.semana_id===sel);
+  if(doc){
+    const ests=(doc.itens||[]).filter(isEst).length, cans=(doc.itens||[]).filter(isCan).length;
+    html+=`<div class="box"><div class="bh"><span class="bt">Estornos salvos desta semana</span></div>
+      <div class="tw"><table><thead><tr><th>Período</th><th class="r">Estornados</th><th class="r">Cancelados</th><th></th></tr></thead>
+      <tbody><tr>
+        <td class="mn">${fmtData(doc.periodo_inicio)} → ${fmtData(doc.periodo_fim)}</td>
+        <td class="r mn">${ests}</td><td class="r mn">${cans}</td>
+        <td><button class="bi" onclick="softDel('estornos_semana','${doc.id}')">✕</button></td>
+      </tr></tbody></table></div></div>`;
+  }
+  return html;
+}
+
+function importEstornosFile(input){
+  const file=input.files&&input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:"array"});
+      const N=Domain._norm, toM=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,blankrows:false});
+      let mat=null;
+      for(const n of wb.SheetNames.filter(n=>N(n).includes("estorna")).concat(wb.SheetNames)){ const m=toM(n); if(!Domain.parseEstornos(m).erro){ mat=m; break; } }
+      if(!mat){ toast("Não encontrei a aba de Produtos estornados/cancelados (Data/Nome do Produto/Tipo/Quantidade).","err","Import"); return; }
+      estornosImport={ fileName:file.name, periodo:Domain.extrairPeriodoEstornos(mat), itens:Domain.parseEstornos(mat).itens };
+      renderConciliacao();
+    }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Import"); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function salvarEstornos(){
+  const sel=S.concilSemanaSel;
+  if(!estornosImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
+  const per=estornosImport.periodo||{}, n=estornosImport.itens.length;
+  // Um arquivo por semana → substitui o doc anterior da semana (reusa o id).
+  const existente=S.estornos_semana.find(e=>e.semana_id===sel);
+  const ok=await FS.save("estornos_semana",{
+    id: existente?existente.id:null, semana_id:sel,
+    periodo_inicio:per.inicio||"", periodo_fim:per.fim||"", mes:mesDeData(per.inicio||""),
+    itens:estornosImport.itens
+  });
+  if(!ok) return;
+  estornosImport=null; renderConciliacao();
+  toast(`Estornos da semana salvos (${n} linhas).`,"ok","Estornos importados");
+}
+
 // ── Conciliação · aba Mapeamento Zig→Estoque (1d) ─────────────────────────────
 function resumoMapa(m){
   if(m.tipo==="ignorar") return "ignorado";
@@ -2393,7 +2494,7 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana"];
+  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana"];
   const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
@@ -2415,7 +2516,7 @@ function unbindData(){
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
   S.custos=[];S.inventarios=[];S.inventarios_mensais=[];
-  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S.cortesias_semana=[];S._trash={};
+  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S.cortesias_semana=[];S.estornos_semana=[];S._trash={};
 }
 
 function showLogin(){

@@ -7,3 +7,18 @@ PLANO_TECNICO_CONCILIACAO_MAHAU.md
 
 # Dependências locais e scripts temporários de inspeção
 node_modules/
+
+# Segredos — nunca commitar (a raiz é servida publicamente pelo Vercel)
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+secrets.json
+service-account*.json
+
+# Config local do Claude Code (não depender do exclude global do git)
+.claude/

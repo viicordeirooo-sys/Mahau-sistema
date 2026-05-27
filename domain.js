@@ -50,11 +50,12 @@ const Domain = {
     return `${y}-${String(m).padStart(2,"0")}`;
   },
 
-  // Índice de estoque (em UNIDADES) baseado na ÚLTIMA contagem física + compras desde então.
+  // Índice de estoque (em UNIDADES) = ÚLTIMA contagem física + compras − baixas de venda, desde a contagem.
   //   contagens: [{ createdAtMs, contagens:{produtoId: qtd} }]  (semanal + mensal unidos)
   //   compras:   [{ produto_id, qtd, createdAtMs }]
-  // Retorna { [pid]: { baseQty, baseMs, hasBase, comprasSince } }.
-  estoqueIndex(produtos, compras, contagens){
+  //   baixas:    [{ produto_id, unidades, createdAtMs }]  (consumo de venda por evento — import Zig; opcional)
+  // Retorna { [pid]: { baseQty, baseMs, hasBase, comprasSince, baixasSince } }.
+  estoqueIndex(produtos, compras, contagens, baixas){
     const base={}; // pid -> {qtd, ms} da contagem mais recente que inclui o produto
     (contagens||[]).forEach(inv=>{
       const ms=inv.createdAtMs||0;
@@ -65,22 +66,28 @@ const Domain = {
     const idx={};
     (produtos||[]).forEach(p=>{
       const b=base[p.id];
-      idx[p.id]={baseQty:b?b.qtd:0, baseMs:b?b.ms:-1, hasBase:!!b, comprasSince:0};
+      idx[p.id]={baseQty:b?b.qtd:0, baseMs:b?b.ms:-1, hasBase:!!b, comprasSince:0, baixasSince:0};
     });
     (compras||[]).forEach(c=>{
       const e=idx[c.produto_id]; if(!e) return;
       // sem contagem ainda → conta todas as compras; com contagem → só as posteriores a ela
       if(!e.hasBase || (c.createdAtMs||0) > e.baseMs) e.comprasSince += (c.qtd||0);
     });
+    // baixas de venda (import Zig por evento) — mesma regra de timing das compras:
+    // sem contagem → todas; com contagem → só as posteriores a ela.
+    (baixas||[]).forEach(b=>{
+      const e=idx[b.produto_id]; if(!e) return;
+      if(!e.hasBase || (b.createdAtMs||0) > e.baseMs) e.baixasSince += (b.unidades||0);
+    });
     return idx;
   },
 
-  // Estoque atual (em unidades): última contagem física + compras desde então.
-  // Produto nunca contado → fallback estoque_inicial + todas as compras.
+  // Estoque atual (em unidades): última contagem física + compras − baixas de venda, desde então.
+  // Produto nunca contado → fallback estoque_inicial + todas as compras − todas as baixas.
   estoqueAtualFrom(produto, idx){
     if(!produto) return 0;
-    const e=(idx&&idx[produto.id])||{baseQty:0,hasBase:false,comprasSince:0};
-    return (e.hasBase ? e.baseQty : (produto.estoque_inicial||0)) + e.comprasSince;
+    const e=(idx&&idx[produto.id])||{baseQty:0,hasBase:false,comprasSince:0,baixasSince:0};
+    return (e.hasBase ? e.baseQty : (produto.estoque_inicial||0)) + e.comprasSince - (e.baixasSince||0);
   },
 
   // Custo (CMV unitário) de uma ficha, somando ingredientes (R$/ml × ml).
@@ -439,6 +446,113 @@ const Domain = {
         cortesias_sem_mapa:cortesiasSemMapa, cortesias_sem_preco:cortesiasSemPreco,
         estornos_sem_mapa:estornosSemMapa
       }
+    };
+  },
+
+  // ── IMPORT DE PRODUTOS VENDIDOS POR EVENTO (Sprint 3) ─────────────────────────
+  // Arquivo "total-produtos-vendidos" da Zig (POR DIA), com 2 abas:
+  //  - Vendidos: SKU, Nome, Categoria, Montável(TRUE/FALSE), Quantidade, Valor unitário, Valor total
+  //  - Montáveis: SKU(pai), Produto(pai), Etapa Montável, Item Montável, Quantidade
+  // ⚠️ Estrutura DIFERENTE da Saída Geral semanal: aqui a garrafa/mixers de um combo
+  // estão SÓ na aba Montáveis (não como linha top-level), por isso a baixa usa as duas abas.
+
+  parseProdutosVendidos(matrix){
+    const MAP={"sku":"sku","nome":"nome","categoria":"categoria","montavel":"montavel",
+      "quantidade":"quantidade","valor unitario":"valor_unitario","valor total":"valor_total"};
+    const {hRow,col}=Domain._detectHeader(matrix,["sku","nome","quantidade"],MAP);
+    if(hRow<0||!col||col.sku===undefined||col.quantidade===undefined) return {erro:"Produtos vendidos: cabeçalho não encontrado (SKU/Nome/Quantidade).",itens:[]};
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[]; const sku=txt(r[col.sku]); if(!sku) continue;
+      itens.push({
+        sku,
+        nome: col.nome!=null?txt(r[col.nome]):"",
+        categoria: col.categoria!=null?txt(r[col.categoria]):"",
+        montavel: col.montavel!=null && txt(r[col.montavel]).toUpperCase()==="TRUE",
+        quantidade: num(r[col.quantidade]),
+        valor_unitario: col.valor_unitario!=null?Domain._numBR(r[col.valor_unitario]):0,
+        valor_total: col.valor_total!=null?Domain._numBR(r[col.valor_total]):0,
+      });
+    }
+    return {erro:null, hRow, itens};
+  },
+
+  parseMontaveis(matrix){
+    const MAP={"sku":"sku_pai","produto":"produto_pai","etapa montavel":"etapa",
+      "item montavel":"item_montavel","quantidade":"quantidade"};
+    const {hRow,col}=Domain._detectHeader(matrix,["sku","item montavel","quantidade"],MAP);
+    if(hRow<0||!col||col.item_montavel===undefined||col.quantidade===undefined) return {erro:"Montáveis: cabeçalho não encontrado (SKU/Item Montável/Quantidade).",itens:[]};
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[]; const item=col.item_montavel!=null?txt(r[col.item_montavel]):""; if(!item) continue;
+      itens.push({
+        sku_pai: col.sku_pai!=null?txt(r[col.sku_pai]):"",
+        produto_pai: col.produto_pai!=null?txt(r[col.produto_pai]):"",
+        etapa: col.etapa!=null?txt(r[col.etapa]):"",
+        item_montavel: item,
+        quantidade: num(r[col.quantidade]),
+      });
+    }
+    return {erro:null, hRow, itens};
+  },
+
+  // Data do evento — título "...no dia DD/MM/YYYY". Reusa o extrator (que varre as 1ªs linhas).
+  extrairDataZigEvento(matrix){ return Domain.extrairPeriodoZig(matrix).inicio || ""; },
+
+  // Traduz o arquivo vendido (2 abas) em baixas de estoque por produto.
+  //  - Vendidos Mont=FALSE  → baixa por SKU (resolverBaixa).
+  //  - Vendidos Mont=TRUE   → PULADO (é só o "container"; o conteúdo real vem dos montáveis).
+  //  - Montáveis            → baixa o item REAL (garrafa/mixer) casando por NOME (resolverBaixa).
+  // Itens sem mapeamento (incluindo modifiers como "BEM PASSADO", "SEM LIMÃO") não baixam nada
+  // e voltam em naoMapeados para o preview.
+  // params: { vendidos, montaveis, mapeamentos, produtos }
+  baixaEvento(params){
+    const N=Domain._norm, p=params||{};
+    const vendidos=p.vendidos||[], montaveis=p.montaveis||[], mapeamentos=p.mapeamentos||[], produtos=p.produtos||[];
+    const prodById={}; produtos.forEach(x=>{ if(x&&x.id) prodById[x.id]=x; });
+    const mapBySku={}, mapByNome={};
+    mapeamentos.forEach(m=>{ if(m.sku_zig) mapBySku[m.sku_zig]=m; if(m.nome_zig) mapByNome[N(m.nome_zig)]=m; });
+
+    const baixas={}, detalhe=[], naoMapSku=[], naoMapNomeRaw=[];
+    const add=(pid,u)=>{ if(!pid||!u) return; baixas[pid]=(baixas[pid]||0)+u; };
+    const nomeProd=pid=>(prodById[pid]&&prodById[pid].nome)||pid;
+    let total_itens=0, total_valor=0;
+
+    // 1) Vendidos — Mont=FALSE baixa por SKU; Mont=TRUE é só container (conteúdo vem dos montáveis)
+    vendidos.forEach(v=>{
+      total_itens += v.quantidade||0;
+      total_valor += v.valor_total||((v.valor_unitario||0)*(v.quantidade||0));
+      if(v.montavel) return;
+      const m=mapBySku[v.sku];
+      if(!m){ naoMapSku.push({sku:v.sku, nome:v.nome, quantidade:v.quantidade||0}); return; }
+      Domain.resolverBaixa(m, v.quantidade||0, prodById).forEach(b=>{
+        add(b.produto_id, b.unidades);
+        detalhe.push({origem:"venda", chave:v.sku, item:v.nome, qtd_zig:v.quantidade||0,
+          produto_id:b.produto_id, produto:nomeProd(b.produto_id), unidades:b.unidades});
+      });
+    });
+
+    // 2) Montáveis — baixa o item REAL escolhido (garrafa/mixer), casando por NOME
+    montaveis.forEach(it=>{
+      const m=mapByNome[N(it.item_montavel)];
+      if(!m){ naoMapNomeRaw.push({nome:it.item_montavel, quantidade:it.quantidade||0}); return; }
+      Domain.resolverBaixa(m, it.quantidade||0, prodById).forEach(b=>{
+        add(b.produto_id, b.unidades);
+        detalhe.push({origem:"montavel", chave:it.item_montavel, item:it.item_montavel, qtd_zig:it.quantidade||0,
+          produto_id:b.produto_id, produto:nomeProd(b.produto_id), unidades:b.unidades});
+      });
+    });
+
+    // agrega itens montáveis não mapeados por nome (soma quantidades repetidas)
+    const aggNome={};
+    naoMapNomeRaw.forEach(x=>{ const k=N(x.nome); if(!aggNome[k]) aggNome[k]={nome:x.nome, quantidade:0}; aggNome[k].quantidade+=x.quantidade; });
+
+    return {
+      baixas, detalhe,
+      naoMapeados:{ skus:naoMapSku, nomes:Object.values(aggNome) },
+      total_itens, total_valor
     };
   },
 

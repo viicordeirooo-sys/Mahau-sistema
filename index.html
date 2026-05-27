@@ -2264,7 +2264,7 @@ function concilEstoqueHTML(){
   const imp=estoqueImport;
   let html=`<div class="fb">
     <div class="ft">Importar Estoque — ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
-    <div style="font-size:11px;color:#484f58;margin-bottom:10px">Envie o XLSX da planilha de produtos (aba "Produtos"). Revise o preview e escolha <strong>ANTES</strong> ou <strong>DEPOIS</strong>.</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px">Envie o XLSX da planilha de produtos (aba "Produtos"). Revise o preview e escolha <strong>ANTES</strong> ou <strong>DEPOIS</strong>. Aqui só salva o <strong>snapshot da semana</strong> — para cadastrar produtos novos ou atualizar o catálogo, use <strong>Estoque → Importar planilha de produtos</strong>.</div>
     <input type="file" id="est-file" accept=".xlsx,.xls" onchange="importEstoqueFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
   </div>`;
   if(imp){
@@ -2287,10 +2287,7 @@ function concilEstoqueHTML(){
         </div>
       </div>
     </div>
-    <div class="lc-strip" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <span style="font-size:11px;color:#3b82f6">📋 Catálogo: ${novos} novo(s) · ${imp.itens.length-novos} já cadastrado(s). Cadastre/atualize para poder mapear os SKUs e conciliar por produto.</span>
-      <button class="btn bp" onclick="cadastrarProdutosDoEstoque()">📋 Cadastrar/atualizar produtos deste arquivo</button>
-    </div>
+    ${novos?`<div class="alert-strip">⚠ ${novos} produto(s) do arquivo não estão no catálogo — o snapshot será salvo, mas esses itens <strong>não casam por produto</strong> na conciliação. Cadastre-os em <strong>Estoque → Importar planilha de produtos</strong>.</div>`:""}
     <div class="box">
       <div class="bh"><span class="bt">Preview — ${imp.itens.length} itens</span><button class="btn bg_ bsm" onclick="estoqueImport=null;renderConciliacao()">✕ Descartar</button></div>
       <div class="tw"><table>
@@ -2365,35 +2362,8 @@ async function salvarEstoqueImport(){
   toast(`${produtos.length} itens salvos como estoque ${tipo}.`,"ok","Estoque importado");
 }
 
-// Cadastra/atualiza o catálogo `produtos` a partir do XLSX importado (upsert por nome,
-// em lote). Re-casa contra S.produtos na hora p/ não duplicar em reimports.
-async function cadastrarProdutosDoEstoque(){
-  if(!estoqueImport){ toast("Importe um arquivo primeiro.","err"); return; }
-  if(!db){ toast("Banco indisponível.","err"); return; }
-  const itens=Domain.casarEstoque(estoqueImport.itens, S.produtos); // re-match com S.produtos atual
-  if(!confirm(`Cadastrar/atualizar ${itens.length} produtos no catálogo a partir deste arquivo?`)) return;
-  try{
-    const ts=firebase.firestore.FieldValue.serverTimestamp();
-    let criados=0, atualizados=0;
-    for(let i=0;i<itens.length;i+=400){
-      const batch=db.batch();
-      itens.slice(i,i+400).forEach(it=>{
-        const base={ nome:it.nome, categoria:it.setor||it.departamento||"", unidade:it.medida||"un",
-          capacidade_ml:it.quantidade_embalagem||0, preco_compra:it.custo||0, estoque_min:it.estoque_minimo||0 };
-        if(it.produto_id){ // existente → atualiza custo/mín/etc., preserva preco_venda e estoque_inicial
-          batch.set(db.collection("produtos").doc(String(it.produto_id)), {...base, updatedAt:ts}, {merge:true});
-          atualizados++;
-        } else { // novo → cria com estoque_inicial = contagem
-          const ref=db.collection("produtos").doc();
-          batch.set(ref, Domain.camposCriacao({...base, estoque_inicial:it.estoque_contado||0, id:ref.id}, ts));
-          criados++;
-        }
-      });
-      await batch.commit();
-    }
-    toast(`Catálogo: ${criados} criado(s), ${atualizados} atualizado(s).`,"ok","Produtos");
-  }catch(e){ toast(FS._msg(e),"err","Falha ao cadastrar produtos"); }
-}
+// (Cadastro/atualização de catálogo foi movido para a página Estoque → salvarCatalogo.
+//  Aqui a aba Estoque da Conciliação só salva o snapshot ANTES/DEPOIS em `estoques`.)
 
 // ── Conciliação · aba Saída Zig (1c) ──────────────────────────────────────────
 // Input = "Saída geral de produtos" (consolidado da semana: SKU/Produto/Quantidade).

@@ -2152,6 +2152,13 @@ function renderLixeira(){
   set("p-lixeira",`
     <div class="eyebrow">RECUPERAÇÃO</div>
     <div class="pg-t">Lixeira</div>
+    <div class="box">
+      <div class="bh"><span class="bt">🔒 Backup</span></div>
+      <div class="bb" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px 14px">
+        <span style="font-size:11px;color:#8b949e">Baixa um .json com <strong>todas as coleções</strong> (inclui a Lixeira). Guarde semanalmente: local + Dropbox.</span>
+        <button class="btn bp" onclick="exportarBackup(this)">💾 Exportar Backup (.json)</button>
+      </div>
+    </div>
     ${total?grupos.map(g=>`
       <div class="box">
         <div class="bh"><span class="bt">${g.label} · ${g.itens.length}</span></div>
@@ -2161,6 +2168,56 @@ function renderLixeira(){
         </table></div>
       </div>`).join(""):`<div class="box"><div class="empty">Lixeira vazia.</div></div>`}
   `);
+}
+
+// ── BACKUP (export JSON de todas as coleções) ─────────────────────────────────
+// Lê direto do Firestore (.get()) p/ capturar inclusive os soft-deletados (Lixeira).
+// O SDK cliente não lista coleções (só Admin SDK) → lista fixa, espelha bindData.
+const BACKUP_COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana","conciliacoes"];
+
+// Converte Timestamps do Firestore → string ISO (detecta por toMillis, então funciona
+// mesmo com o toJSON do SDK). Recursivo em objetos/arrays; preserva o resto.
+function backupSerialize(v){
+  if(v==null || typeof v!=="object") return v;
+  if(typeof v.toMillis==="function") return new Date(v.toMillis()).toISOString();
+  if(Array.isArray(v)) return v.map(backupSerialize);
+  const o={}; for(const k in v) if(Object.prototype.hasOwnProperty.call(v,k)) o[k]=backupSerialize(v[k]);
+  return o;
+}
+
+function baixarArquivo(nome, conteudo, mime){
+  const blob=new Blob([conteudo], {type: mime||"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=nome;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+async function exportarBackup(btn){
+  if(!db){ toast("Banco indisponível.","err"); return; }
+  const orig=btn&&btn.textContent;
+  if(btn){ btn.disabled=true; btn.textContent="Exportando..."; }
+  try{
+    const collections={}, counts={};
+    for(const col of BACKUP_COLS){
+      const snap=await db.collection(col).get();
+      collections[col]=snap.docs.map(d=>backupSerialize({...d.data(), id:d.id}));
+      counts[col]=collections[col].length;
+    }
+    const cfg=await db.collection("config").doc("settings").get();
+    collections.config=cfg.exists?backupSerialize(cfg.data()):null;
+
+    const backup={ exported_at:new Date().toISOString(), project:"mahau-sistema", version:1, counts, collections };
+    const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,"-"); // YYYY-MM-DD-HH-mm
+    baixarArquivo(`mahau-backup-${stamp}.json`, JSON.stringify(backup,null,2));
+    const total=Object.values(counts).reduce((a,b)=>a+b,0);
+    toast(`Backup gerado: ${total} documentos em ${BACKUP_COLS.length} coleções.`,"ok","Backup");
+  }catch(e){
+    toast(FS._msg?FS._msg(e):(e.message||"Falha ao exportar."),"err","Falha no backup");
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=orig; }
+  }
 }
 
 // ── CONCILIAÇÃO DE ESTOQUE ────────────────────────────────────────────────────

@@ -232,6 +232,89 @@ const Domain = {
     });
   },
 
+  // R$ no formato US da Zig ("R$57.00", "R$1,210.00", "R$0.00") → número.
+  // Vírgula = milhar, ponto = decimal (confirmado nos arquivos reais).
+  _numBR(v){
+    if(v==null) return 0;
+    const s=String(v).replace(/r\$/i,"").replace(/\s/g,"").replace(/,/g,"").trim();
+    if(!s) return 0;
+    const n=parseFloat(s); return isNaN(n)?0:n;
+  },
+
+  // Data no formato US dos relatórios de linha da Zig ("5/23/26" = M/D/YY) → ISO "2026-05-23".
+  // Aceita ano de 2 ou 4 dígitos. ⚠️ Diferente do título (que usa DD/MM/YYYY → extrairPeriodoZig).
+  _dataUS(v){
+    const s=(v==null?"":String(v)).trim();
+    const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if(!m) return "";
+    let mo=m[1], d=m[2], y=m[3];
+    if(y.length===2) y="20"+y;
+    return `${y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  },
+
+  // Parser da "Bonificação por produto" (cortesias) da Zig. Header dinâmico.
+  // ⚠️ Há DUAS colunas chamadas "Categoria do Produto": a 1ª (à esquerda de "Produto")
+  // é o PROMOTER/grupo da cortesia; a 2ª (à direita) é a categoria do produto.
+  // Por isso casamos por posição relativa a "Produto", não por nome de coluna.
+  parseCortesias(matrix){
+    const N=Domain._norm;
+    let hRow=-1, pCol=-1, vCol=-1, voCol=-1;
+    for(let i=0;i<(matrix||[]).length;i++){
+      const cells=(matrix[i]||[]).map(N);
+      const pi=cells.indexOf("produto");
+      const vi=cells.findIndex(c=>c.includes("bonificacao recebida durante"));
+      if(pi>=0 && vi>=0){
+        hRow=i; pCol=pi; vCol=vi;
+        voCol=cells.findIndex(c=>c.includes("bonificacao recebida em outro"));
+        break;
+      }
+    }
+    if(hRow<0) return {erro:"Cortesias: cabeçalho não encontrado (esperado: Produto + Bonificação recebida durante o período).", itens:[]};
+    const promoCol=pCol-1, catCol=pCol+1;
+    const txt=v=>(v==null?"":String(v)).trim();
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[]; const produto=txt(r[pCol]); if(!produto) continue;
+      itens.push({
+        promoter: promoCol>=0?txt(r[promoCol]):"",
+        produto,
+        categoria: txt(r[catCol]),
+        valor_brl: Domain._numBR(r[vCol]),
+        valor_outro_periodo: voCol>=0?Domain._numBR(r[voCol]):0,
+      });
+    }
+    return {erro:null, hRow, itens};
+  },
+
+  // Parser de "Produtos estornados/cancelados" da Zig. Header dinâmico.
+  // Mantém `tipo` cru ("Estornado"|"Cancelado") — só "Estornado" devolve ao estoque (motor).
+  parseEstornos(matrix){
+    const MAP={"data":"data","nome do produto":"produto","categoria":"categoria","tipo":"tipo",
+      "motivo":"motivo","quantidade":"quantidade","valor":"valor"};
+    const {hRow,col}=Domain._detectHeader(matrix,["data","nome do produto","tipo","quantidade"],MAP);
+    if(hRow<0||!col||col.produto===undefined||col.tipo===undefined) return {erro:"Estornos: cabeçalho não encontrado (Data/Nome do Produto/Tipo/Quantidade).",itens:[]};
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;}, txt=v=>(v==null?"":String(v)).trim();
+    const itens=[];
+    for(let i=hRow+1;i<matrix.length;i++){
+      const r=matrix[i]||[]; const produto=col.produto!=null?txt(r[col.produto]):""; if(!produto) continue;
+      itens.push({
+        data: col.data!=null?Domain._dataUS(r[col.data]):"",
+        produto,
+        categoria: col.categoria!=null?txt(r[col.categoria]):"",
+        tipo: txt(r[col.tipo]),
+        motivo: col.motivo!=null?txt(r[col.motivo]):"",
+        quantidade: col.quantidade!=null?num(r[col.quantidade]):0,
+        valor: col.valor!=null?Domain._numBR(r[col.valor]):0,
+      });
+    }
+    return {erro:null, hRow, itens};
+  },
+
+  // Período do título — cortesias e estornos usam o MESMO formato ("...entre DD/MM/YYYY e DD/MM/YYYY")
+  // que a Saída Geral, então delegamos ao extrator existente (sem duplicar o regex).
+  extrairPeriodoCortesias(matrix){ return Domain.extrairPeriodoZig(matrix); },
+  extrairPeriodoEstornos(matrix){ return Domain.extrairPeriodoZig(matrix); },
+
 };
 
 if (typeof module!=='undefined' && module.exports) module.exports = Domain;

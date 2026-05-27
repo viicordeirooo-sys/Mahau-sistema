@@ -380,7 +380,7 @@ const S = {
   page:"dash",
   produtos:[],fichas:[],compras:[],eventos:[],
   custos:[],inventarios:[],inventarios_mensais:[],
-  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[],estornos_semana:[], // módulo Conciliação
+  semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[],estornos_semana:[],conciliacoes:[], // módulo Conciliação
   config:{datasNoMes:4},
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null,  // null = todos os meses
@@ -1851,6 +1851,7 @@ const LIXEIRA_COLS=[
   {col:"vendas_zig",     label:"Vendas Zig"},
   {col:"cortesias_semana", label:"Cortesias (conciliação)"},
   {col:"estornos_semana", label:"Estornos (conciliação)"},
+  {col:"conciliacoes",    label:"Conciliações"},
   {col:"mapeamento_zig",  label:"Mapeamentos Zig"},
 ];
 function descreveDoc(col,d){
@@ -1865,6 +1866,7 @@ function descreveDoc(col,d){
     case "vendas_zig": return `Saída ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "cortesias_semana": return `Cortesias ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "estornos_semana": return `Estornos ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
+    case "conciliacoes": return `Conciliação ${fmtData(d.periodo_inicio)} → ${fmtData(d.periodo_fim)}`;
     case "mapeamento_zig": return `${d.sku_zig||""} · ${d.nome_zig||""}`;
     default: return d.id||"";
   }
@@ -1905,6 +1907,7 @@ const CONCIL_TABS=[
   {id:"cortesias", label:"🎁 Cortesias"},
   {id:"estornos", label:"↩️ Estornos"},
   {id:"mapa",    label:"🔗 Mapeamento"},
+  {id:"resultado", label:"⚖️ Resultado"},
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
 let vendasZigImport=null; // preview do import de VENDAS Zig (produtos vendidos+montáveis) p/ conciliação de estoque — NÃO é o evento financeiro
@@ -1913,6 +1916,7 @@ let estornosImport=null; // preview do import de estornos/cancelados p/ concilia
 let concilEstornoView="estornado"; // sub-aba visual do preview de estornos: "estornado" | "cancelado"
 let mapaForm=null; // formulário de mapeamento Zig→Estoque em edição
 let concilMapaQ=""; // busca da lista de SKUs não mapeados
+let concilResultFiltro="todos"; // filtro da tela de Resultado: todos|falta|sobra|ok|sem_ficha
 
 function renderConciliacao(){
   const tab=S.concilTab||"semanas";
@@ -1924,6 +1928,7 @@ function renderConciliacao(){
     : tab==="vendas" ? concilVendasHTML()
     : tab==="cortesias" ? concilCortesiasHTML()
     : tab==="estornos" ? concilEstornosHTML()
+    : tab==="resultado" ? concilResultadoHTML()
     : concilMapaHTML();
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
@@ -2495,6 +2500,168 @@ function concilMapaHTML(){
     </div>`;
 }
 
+// ── Conciliação · aba Resultado (2e) ──────────────────────────────────────────
+// Roda Domain.conciliar com as fontes da semana ativa e salva em `conciliacoes`
+// (1 por semana, substitui). Doc: {semana_id, periodo_inicio/fim, mes, gerado_em,
+// resultados:[...], total_falta, total_sobra, contagem, meta}.
+const STAT_CONCIL={ok:["OK","#22c55e"],falta:["FALTA","#ef4444"],sobra:["SOBRA","#f59e0b"],sem_ficha:["SEM FICHA","#6b7280"]};
+function fmtU(n){ const r=Math.round((n||0)*100)/100; return r.toLocaleString("pt-BR"); }
+
+function concilResultadoHTML(){
+  const sel=S.concilSemanaSel;
+  if(!sel) return `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Selecione uma semana na aba 📆 Semanas para conciliar.</div>`;
+  const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
+  const eAntes=S.estoques.find(e=>e.semana_id===sel && e.tipo==="antes");
+  const eDepois=S.estoques.find(e=>e.semana_id===sel && e.tipo==="depois");
+  const saida=S.vendas_zig.find(e=>e.semana_id===sel);
+  const cort=S.cortesias_semana.find(e=>e.semana_id===sel);
+  const est=S.estornos_semana.find(e=>e.semana_id===sel);
+  const faltando=[];
+  if(!eAntes) faltando.push("Estoque ANTES");
+  if(!eDepois) faltando.push("Estoque DEPOIS");
+  if(!saida) faltando.push("Saída Geral");
+  const podeGerar=faltando.length===0;
+  const doc=S.conciliacoes.find(c=>c.semana_id===sel);
+
+  let html=`<div class="fb">
+    <div class="ft">Conciliação — ${fmtData(s.periodo_inicio)} → ${fmtData(s.periodo_fim)}</div>
+    <div style="font-size:11px;color:#484f58;margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      ${chip(eAntes?"estoque antes ✓":"sem estoque antes",eAntes?"#22c55e":"#ef4444")}
+      ${chip(eDepois?"estoque depois ✓":"sem estoque depois",eDepois?"#22c55e":"#ef4444")}
+      ${chip(saida?"saída ✓":"sem saída",saida?"#22c55e":"#ef4444")}
+      ${chip(cort?"cortesias ✓":"sem cortesias",cort?"#22c55e":"#6b7280")}
+      ${chip(est?"estornos ✓":"sem estornos",est?"#22c55e":"#6b7280")}
+    </div>
+    ${podeGerar
+      ? `<button class="btn bp" onclick="gerarConciliacao()">${doc?"↻ Regerar Conciliação":"⚖️ Gerar Conciliação"}</button>`
+      : `<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">Faltam fontes obrigatórias: <strong>${faltando.join(", ")}</strong>. Importe nas abas anteriores (cortesias e estornos são opcionais).</div>`}
+  </div>`;
+
+  if(!doc) return html+(podeGerar?`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Clique em <strong>Gerar Conciliação</strong> para calcular o desvio por produto.</div>`:"");
+
+  const ct=doc.contagem||{};
+  html+=`<div class="kpis">
+    ${kpi("Total Falta",R(doc.total_falta||0),(ct.falta||0)+" itens","#ef4444","#ef4444")}
+    ${kpi("Total Sobra",R(doc.total_sobra||0),(ct.sobra||0)+" itens","#f59e0b","#f59e0b")}
+    ${kpi("Produtos OK",(ct.ok||0)+"","dentro de ±0,5","#22c55e","#22c55e")}
+    ${kpi("Sem ficha",(ct.sem_ficha||0)+"","fora do cálculo","#6b7280","#6b7280")}
+  </div>`;
+
+  const meta=doc.meta||{}, avisos=[];
+  if((meta.skus_nao_mapeados||[]).length) avisos.push(`${meta.skus_nao_mapeados.length} SKU(s) de venda não mapeados`);
+  if(meta.cortesias_sem_mapa) avisos.push(`${meta.cortesias_sem_mapa} cortesia(s) sem mapeamento`);
+  if(meta.cortesias_sem_preco) avisos.push(`${meta.cortesias_sem_preco} cortesia(s) sem preço Zig`);
+  if(meta.estornos_sem_mapa) avisos.push(`${meta.estornos_sem_mapa} estorno(s) sem mapeamento`);
+  if(avisos.length) html+=`<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">⚠ Ficou de fora do cálculo: ${avisos.join(" · ")}.</div>`;
+
+  const filtro=concilResultFiltro||"todos";
+  const fbtn=(id,label)=>`<button class="pill${filtro===id?" on":""}" onclick="concilResultFiltro='${id}';renderConciliacao()">${label}</button>`;
+  html+=`<div class="fb"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="pills">${fbtn("todos","Todos")}${fbtn("falta","Faltas")}${fbtn("sobra","Sobras")}${fbtn("ok","OK")}${fbtn("sem_ficha","Sem ficha")}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg_ bsm" onclick="copiarConciliacaoWhatsApp()">📋 WhatsApp</button>
+      <button class="btn bg_ bsm" onclick="exportarConciliacaoPDF()">🖨️ PDF</button>
+    </div>
+  </div><div style="font-size:10px;color:#484f58;margin-top:6px">Gerado em ${fmtData((doc.gerado_em||"").slice(0,10))} · ${(doc.resultados||[]).length} produtos contados</div></div>`;
+
+  const tint={ok:"",falta:"background:rgba(239,68,68,.06)",sobra:"background:rgba(245,158,11,.06)",sem_ficha:"background:rgba(107,114,128,.05)"};
+  let rows=(doc.resultados||[]).slice();
+  if(filtro!=="todos") rows=rows.filter(r=>r.status===filtro);
+  html+=`<div class="box">
+    <div class="bh"><span class="bt">${rows.length} produto(s)${filtro!=="todos"?` · ${STAT_CONCIL[filtro][0]}`:""}</span></div>
+    <div class="tw"><table>
+      <thead><tr><th>Produto</th><th class="r">Antes</th><th class="r">Compras</th><th class="r">Venda</th><th class="r">Cortesia</th><th class="r">Estorno</th><th class="r">Esperado</th><th class="r">Real</th><th class="r">Desvio</th><th class="r">R$</th><th>Status</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr style="${tint[r.status]||""}">
+        <td class="w6">${r.nome}</td>
+        <td class="r mn">${fmtU(r.antes)}</td><td class="r mn">${fmtU(r.compras)}</td><td class="r mn">${fmtU(r.venda)}</td>
+        <td class="r mn">${fmtU(r.cortesia)}</td><td class="r mn">${fmtU(r.estorno)}</td><td class="r mn">${fmtU(r.esperado)}</td>
+        <td class="r mn">${fmtU(r.real)}</td>
+        <td class="r mn" style="color:${r.desvio<0?"#ef4444":r.desvio>0?"#f59e0b":"#8b949e"}">${r.desvio>0?"+":""}${fmtU(r.desvio)}</td>
+        <td class="r mn">${r.valor_rs?R(r.valor_rs):"—"}</td>
+        <td>${chip(STAT_CONCIL[r.status][0],STAT_CONCIL[r.status][1])}</td>
+      </tr>`).join(""):`<tr><td colspan="11" class="empty">Nenhum produto neste filtro.</td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+  return html;
+}
+
+async function gerarConciliacao(){
+  const sel=S.concilSemanaSel;
+  if(!sel){ toast("Selecione uma semana.","err"); return; }
+  const s=S.semanas_conciliacao.find(x=>x.id===sel)||{};
+  const eAntes=S.estoques.find(e=>e.semana_id===sel && e.tipo==="antes");
+  const eDepois=S.estoques.find(e=>e.semana_id===sel && e.tipo==="depois");
+  const saida=S.vendas_zig.find(e=>e.semana_id===sel);
+  if(!eAntes||!eDepois||!saida){ toast("Faltam fontes obrigatórias (estoque antes/depois e saída).","err"); return; }
+  const cort=S.cortesias_semana.find(e=>e.semana_id===sel);
+  const est=S.estornos_semana.find(e=>e.semana_id===sel);
+  const r=Domain.conciliar({
+    estoqueAntes:eAntes.produtos||[], estoqueDepois:eDepois.produtos||[],
+    saidaGeral:saida.itens||[], cortesias:(cort&&cort.itens)||[], estornos:(est&&est.itens)||[],
+    compras:S.compras, mapeamentos:S.mapeamento_zig, produtos:S.produtos,
+    opts:{periodo_inicio:s.periodo_inicio, periodo_fim:s.periodo_fim}
+  });
+  const existente=S.conciliacoes.find(c=>c.semana_id===sel);
+  const ok=await FS.save("conciliacoes",{
+    id: existente?existente.id:null, semana_id:sel,
+    periodo_inicio:s.periodo_inicio||"", periodo_fim:s.periodo_fim||"", mes:mesDeData(s.periodo_inicio||""),
+    gerado_em:new Date().toISOString(),
+    resultados:r.resultados, total_falta:r.total_falta, total_sobra:r.total_sobra,
+    contagem:r.contagem, meta:r.meta
+  });
+  if(!ok) return;
+  renderConciliacao();
+  toast(`Conciliação gerada: ${r.contagem.falta} falta(s), ${r.contagem.sobra} sobra(s).`,"ok","Conciliação");
+}
+
+function copiarConciliacaoWhatsApp(){
+  const sel=S.concilSemanaSel, doc=S.conciliacoes.find(c=>c.semana_id===sel);
+  if(!doc){ toast("Gere a conciliação primeiro.","err"); return; }
+  const ct=doc.contagem||{};
+  const faltas=(doc.resultados||[]).filter(r=>r.status==="falta").slice(0,12);
+  const sobras=(doc.resultados||[]).filter(r=>r.status==="sobra").slice(0,8);
+  let t=`⚖️ *Conciliação de Estoque*\nSemana: ${fmtData(doc.periodo_inicio)} → ${fmtData(doc.periodo_fim)}\n\n`;
+  t+=`🔴 Faltas: ${R(doc.total_falta||0)} (${ct.falta||0} itens)\n`;
+  t+=`🟡 Sobras: ${R(doc.total_sobra||0)} (${ct.sobra||0} itens)\n`;
+  t+=`🟢 OK: ${ct.ok||0}  ⚪ Sem ficha: ${ct.sem_ficha||0}\n`;
+  if(faltas.length){ t+=`\n*Maiores faltas:*\n`; faltas.forEach(r=>{ t+=`• ${r.nome}: ${fmtU(r.desvio)} un (${R(r.valor_rs)})\n`; }); }
+  if(sobras.length){ t+=`\n*Maiores sobras:*\n`; sobras.forEach(r=>{ t+=`• ${r.nome}: +${fmtU(r.desvio)} un (${R(r.valor_rs)})\n`; }); }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(()=>toast("Resumo copiado — cole no WhatsApp.","ok","WhatsApp")).catch(()=>toast("Não consegui copiar para a área de transferência.","err"));
+  } else { toast("Área de transferência indisponível neste navegador.","err"); }
+}
+
+function exportarConciliacaoPDF(){
+  const sel=S.concilSemanaSel, doc=S.conciliacoes.find(c=>c.semana_id===sel);
+  if(!doc){ toast("Gere a conciliação primeiro.","err"); return; }
+  const ct=doc.contagem||{};
+  const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const rows=(doc.resultados||[]).filter(r=>r.status!=="ok"); // PDF foca no acionável
+  const trs=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.nome)}</td><td class=n>${fmtU(r.antes)}</td><td class=n>${fmtU(r.compras)}</td><td class=n>${fmtU(r.venda)}</td><td class=n>${fmtU(r.cortesia)}</td><td class=n>${fmtU(r.estorno)}</td><td class=n>${fmtU(r.esperado)}</td><td class=n>${fmtU(r.real)}</td><td class=n>${r.desvio>0?"+":""}${fmtU(r.desvio)}</td><td class=n>${r.valor_rs?R(r.valor_rs):"—"}</td><td>${STAT_CONCIL[r.status][0]}</td></tr>`).join("");
+  const win=window.open("","_blank");
+  if(!win){ toast("Permita pop-ups para exportar o PDF.","err"); return; }
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Conciliacao ${fmtData(doc.periodo_inicio)}</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:24px}h1{font-size:18px;margin:0 0 2px}.sub{color:#666;font-size:12px;margin-bottom:14px}
+  .cards{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.card{border:1px solid #ddd;border-radius:6px;padding:8px 12px;font-size:12px}.card b{display:block;font-size:16px}
+  table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left}td.n,th.n{text-align:right}
+  tr.falta td{background:#fdecec}tr.sobra td{background:#fff6e6}tr.sem_ficha td{background:#f2f2f2;color:#666}
+  @media print{body{margin:0}}</style></head><body>
+  <h1>Conciliacao de Estoque</h1>
+  <div class="sub">Semana ${fmtData(doc.periodo_inicio)} &rarr; ${fmtData(doc.periodo_fim)} · gerado em ${fmtData((doc.gerado_em||"").slice(0,10))}</div>
+  <div class="cards">
+    <div class="card">Total Falta<b style="color:#c0392b">${R(doc.total_falta||0)}</b>${ct.falta||0} itens</div>
+    <div class="card">Total Sobra<b style="color:#b9770e">${R(doc.total_sobra||0)}</b>${ct.sobra||0} itens</div>
+    <div class="card">Produtos OK<b style="color:#1e7e34">${ct.ok||0}</b></div>
+    <div class="card">Sem ficha<b style="color:#666">${ct.sem_ficha||0}</b></div>
+  </div>
+  <table><thead><tr><th>Produto</th><th class=n>Antes</th><th class=n>Compras</th><th class=n>Venda</th><th class=n>Cortesia</th><th class=n>Estorno</th><th class=n>Esperado</th><th class=n>Real</th><th class=n>Desvio</th><th class=n>R$</th><th>Status</th></tr></thead>
+  <tbody>${trs||`<tr><td colspan="11">Sem divergencias (tudo OK).</td></tr>`}</tbody></table>
+  <p style="color:#999;font-size:10px;margin-top:14px">Mostrando apenas faltas, sobras e sem-ficha. Produtos OK omitidos. Total contado: ${(doc.resultados||[]).length}.</p>
+  </body></html>`);
+  win.document.close();
+  setTimeout(()=>{ try{ win.focus(); win.print(); }catch(_){} },300);
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 let _unsubs = [];
 
@@ -2503,7 +2670,7 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana"];
+  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana","conciliacoes"];
   const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{
@@ -2525,7 +2692,7 @@ function unbindData(){
   _unsubs=[];
   S.produtos=[];S.fichas=[];S.compras=[];S.eventos=[];
   S.custos=[];S.inventarios=[];S.inventarios_mensais=[];
-  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S.cortesias_semana=[];S.estornos_semana=[];S._trash={};
+  S.semanas_conciliacao=[];S.estoques=[];S.vendas_zig=[];S.mapeamento_zig=[];S.cortesias_semana=[];S.estornos_semana=[];S.conciliacoes=[];S._trash={};
 }
 
 function showLogin(){

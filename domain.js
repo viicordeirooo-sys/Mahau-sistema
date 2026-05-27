@@ -315,6 +315,133 @@ const Domain = {
   extrairPeriodoCortesias(matrix){ return Domain.extrairPeriodoZig(matrix); },
   extrairPeriodoEstornos(matrix){ return Domain.extrairPeriodoZig(matrix); },
 
+  // ── MOTOR DE CONCILIAÇÃO (Sprint 2 · 2d) ──────────────────────────────────────
+  // Produtos sem ficha técnica definida → não entram no cálculo de desvio (status SEM FICHA).
+  PRODUTOS_SEM_FICHA: ["Gin Mahau","Kawai - vodka","Gelo De Coco"],
+  semFicha(nome){
+    const n=Domain._norm(nome);
+    return Domain.PRODUTOS_SEM_FICHA.some(x=>Domain._norm(x)===n);
+  },
+
+  // Traduz "produto Zig + quantidade" em baixas de estoque: [{produto_id, unidades}].
+  // Compartilhado por venda (mapeado por SKU), cortesia e estorno (mapeados por nome).
+  //  - ignorar         → nada
+  //  - direto/montavel → regras[0]: qtd × quantidade_baixa; se unidade "ml" e o produto
+  //                      tem capacidade_ml, converte p/ garrafas (ml ÷ capacidade_ml)
+  //  - combo           → SÓ o mixer (Red Bull/tônica): qtd × redbull_qtd do mixer_produto_id.
+  //                      A garrafa do combo NÃO entra aqui — ela é baixada pela linha montável
+  //                      separada da Saída Geral (evita a dupla contagem nativa dos combos).
+  resolverBaixa(mapping, qtd, prodById){
+    if(!mapping || !qtd) return [];
+    const t=mapping.tipo;
+    if(t==="ignorar") return [];
+    if(t==="combo"){
+      const mid=mapping.mixer_produto_id, mq=mapping.redbull_qtd||0;
+      if(!mid || !mq) return [];
+      return [{produto_id:mid, unidades: qtd*mq}];
+    }
+    const r=(mapping.regras&&mapping.regras[0]);
+    if(!r || !r.produto_id) return [];
+    const qb=r.quantidade_baixa||0; if(!qb) return [];
+    if((r.unidade||"un").toLowerCase()==="ml"){
+      const p=prodById&&prodById[r.produto_id], cap=(p&&p.capacidade_ml)||0;
+      if(cap>0) return [{produto_id:r.produto_id, unidades:(qtd*qb)/cap}];
+    }
+    return [{produto_id:r.produto_id, unidades: qtd*qb}];
+  },
+
+  // Motor principal. Fórmula por produto: esperado = antes + compras − venda − cortesia + estorno;
+  // desvio = real(depois) − esperado. Devolve resultados, totais e meta do que ficou de fora.
+  // params: {estoqueAntes, estoqueDepois, saidaGeral, cortesias, estornos, compras,
+  //          mapeamentos, produtos, opts:{periodo_inicio, periodo_fim}}
+  conciliar(params){
+    const N=Domain._norm, p=params||{};
+    const estoqueAntes=p.estoqueAntes||[], estoqueDepois=p.estoqueDepois||[];
+    const saida=p.saidaGeral||[], cortesias=p.cortesias||[], estornos=p.estornos||[];
+    const compras=p.compras||[], mapeamentos=p.mapeamentos||[], produtos=p.produtos||[];
+    const opts=p.opts||{}, ini=opts.periodo_inicio||"", fim=opts.periodo_fim||"";
+
+    const prodById={}; produtos.forEach(x=>{ if(x&&x.id) prodById[x.id]=x; });
+    const mapBySku={}, mapByNome={};
+    mapeamentos.forEach(m=>{ if(m.sku_zig) mapBySku[m.sku_zig]=m; if(m.nome_zig) mapByNome[N(m.nome_zig)]=m; });
+
+    const venda={}, cortesia={}, estornoDev={}, comprasPid={};
+    const add=(o,pid,u)=>{ if(!pid) return; o[pid]=(o[pid]||0)+u; };
+
+    // 1) consumo de venda (Saída Geral) — combo-pai baixa só o mixer (anti-dupla-contagem)
+    const skusNaoMapeados=[];
+    saida.forEach(v=>{
+      const m=mapBySku[v.sku];
+      if(!m){ if(v.sku) skusNaoMapeados.push(v.sku); return; }
+      Domain.resolverBaixa(m, v.quantidade||0, prodById).forEach(b=>add(venda,b.produto_id,b.unidades));
+    });
+
+    // 2) consumo de cortesia — qtd = round(valor_brl / preco_zig); casa por nome
+    let cortesiasSemMapa=0, cortesiasSemPreco=0;
+    cortesias.forEach(c=>{
+      const m=mapByNome[N(c.produto)];
+      if(!m){ cortesiasSemMapa++; return; }
+      const preco=m.preco_zig||0;
+      if(preco<=0){ cortesiasSemPreco++; return; }
+      const qtd=Math.round((c.valor_brl||0)/preco);
+      if(qtd<=0) return;
+      Domain.resolverBaixa(m, qtd, prodById).forEach(b=>add(cortesia,b.produto_id,b.unidades));
+    });
+
+    // 3) estorno devolvido — só "Estornado" volta ao estoque; casa por nome
+    let estornosSemMapa=0;
+    estornos.forEach(e=>{
+      if(N(e.tipo)!=="estornado") return;
+      const m=mapByNome[N(e.produto)];
+      if(!m){ estornosSemMapa++; return; }
+      Domain.resolverBaixa(m, e.quantidade||0, prodById).forEach(b=>add(estornoDev,b.produto_id,b.unidades));
+    });
+
+    // 4) compras da semana (reusa a coleção `compras`), por data ISO no período
+    compras.forEach(c=>{
+      const d=c.data||"";
+      if(ini && d<ini) return;
+      if(fim && d>fim) return;
+      add(comprasPid, c.produto_id, c.qtd||0);
+    });
+
+    // 5) universo = produtos contados (antes ∪ depois); exige produto_id
+    const antesBy={}, depoisBy={}, custoBy={}, nomeBy={};
+    estoqueAntes.forEach(i=>{ if(i.produto_id){ antesBy[i.produto_id]=i.estoque_contado||0; if(i.custo) custoBy[i.produto_id]=i.custo; if(i.nome) nomeBy[i.produto_id]=i.nome; } });
+    estoqueDepois.forEach(i=>{ if(i.produto_id){ depoisBy[i.produto_id]=i.estoque_contado||0; if(i.custo) custoBy[i.produto_id]=i.custo; if(i.nome) nomeBy[i.produto_id]=i.nome; } });
+    const pids=Object.keys(Object.assign({}, antesBy, depoisBy));
+
+    const resultados=[];
+    let total_falta=0, total_sobra=0, cOk=0, cFalta=0, cSobra=0, cSem=0;
+    pids.forEach(pid=>{
+      const pr=prodById[pid]||{};
+      const nome=pr.nome||nomeBy[pid]||pid;
+      const antes=antesBy[pid]||0, real=depoisBy[pid]||0;
+      const compr=comprasPid[pid]||0, vnd=venda[pid]||0, cor=cortesia[pid]||0, est=estornoDev[pid]||0;
+      const esperado=antes+compr-vnd-cor+est;
+      const desvio=real-esperado;
+      const preco=pr.preco_compra||custoBy[pid]||0;
+      const valor_rs=Math.abs(desvio)*preco;
+      let status;
+      if(Domain.semFicha(nome)){ status="sem_ficha"; cSem++; }
+      else if(Math.abs(desvio)<0.5){ status="ok"; cOk++; }
+      else if(desvio<0){ status="falta"; cFalta++; total_falta+=valor_rs; }
+      else { status="sobra"; cSobra++; total_sobra+=valor_rs; }
+      resultados.push({produto_id:pid, nome, antes, compras:compr, venda:vnd, cortesia:cor, estorno:est, esperado, real, desvio, valor_rs, preco_compra:preco, status});
+    });
+    resultados.sort((a,b)=>b.valor_rs-a.valor_rs);
+
+    return {
+      resultados, total_falta, total_sobra,
+      contagem:{ok:cOk, falta:cFalta, sobra:cSobra, sem_ficha:cSem, total:resultados.length},
+      meta:{
+        skus_nao_mapeados:[...new Set(skusNaoMapeados)],
+        cortesias_sem_mapa:cortesiasSemMapa, cortesias_sem_preco:cortesiasSemPreco,
+        estornos_sem_mapa:estornosSemMapa
+      }
+    };
+  },
+
 };
 
 if (typeof module!=='undefined' && module.exports) module.exports = Domain;

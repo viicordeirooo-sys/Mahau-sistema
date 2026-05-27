@@ -8,7 +8,7 @@ Mahau is a financial management system (in Brazilian Portuguese) for a bar / eve
 
 - **Run it:** open `index.html` in a browser, or serve the directory statically (e.g. `python -m http.server`). All UI text and domain terms are in Portuguese.
 - **Dependencies** are loaded from CDNs in the `<head>` (lines 7-9): Firebase 10.12.0 *compat* SDK (`firebase-app-compat`, `firebase-firestore-compat`) and SheetJS `xlsx` 0.18.5. There is no local `node_modules`.
-- **Persistence** is Firebase Firestore. The config is hardcoded at `index.html:208-215` (project `mahau-sistema`). There is **no authentication** — the app assumes open Firestore rules (`allow read, write: if true`). If a write fails, the app surfaces this in an alert.
+- **Persistence** is Firebase Firestore. The config is hardcoded at `index.html:208-215` (project `mahau-sistema`). **Authentication:** Firebase Auth (email/senha) — the whole app sits behind a login screen (`doLogin`/`onAuthStateChanged` → `showApp`/`showLogin`, `bindData`/`unbindData` attach/detach the listeners). There's effectively a single user, so **logado = admin**. Firestore rules require an authenticated user (`allow read, write: if request.auth != null`) and live in `firestore.rules`, **applied manually via the Firebase console** (not auto-deployed — see that file's header); per-org `orgId` isolation is a future phase. If a write fails, the app surfaces the error via toast.
 
 ## Architecture
 

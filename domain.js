@@ -333,8 +333,10 @@ const Domain = {
   // Traduz "produto Zig + quantidade" em baixas de estoque: [{produto_id, unidades}].
   // Compartilhado por venda (mapeado por SKU), cortesia e estorno (mapeados por nome).
   //  - ignorar         → nada
-  //  - direto/montavel → regras[0]: qtd × quantidade_baixa; se unidade "ml" e o produto
-  //                      tem capacidade_ml, converte p/ garrafas (ml ÷ capacidade_ml)
+  //  - direto/montavel → TODAS as regras: por regra, qtd × quantidade_baixa; se unidade "ml" e o
+  //                      produto tem capacidade_ml, converte p/ garrafas (ml ÷ capacidade_ml).
+  //                      Drinks com vários ingredientes (Long Island = vodka+gin+tequila+rum+
+  //                      cointreau) baixam 1 linha por ingrediente. 1 regra → mesmo resultado de antes.
   //  - combo           → SÓ o mixer (Red Bull/tônica): qtd × redbull_qtd do mixer_produto_id.
   //                      A garrafa do combo NÃO entra aqui — ela é baixada pela linha montável
   //                      separada da Saída Geral (evita a dupla contagem nativa dos combos).
@@ -347,14 +349,17 @@ const Domain = {
       if(!mid || !mq) return [];
       return [{produto_id:mid, unidades: qtd*mq}];
     }
-    const r=(mapping.regras&&mapping.regras[0]);
-    if(!r || !r.produto_id) return [];
-    const qb=r.quantidade_baixa||0; if(!qb) return [];
-    if((r.unidade||"un").toLowerCase()==="ml"){
-      const p=prodById&&prodById[r.produto_id], cap=(p&&p.capacidade_ml)||0;
-      if(cap>0) return [{produto_id:r.produto_id, unidades:(qtd*qb)/cap}];
-    }
-    return [{produto_id:r.produto_id, unidades: qtd*qb}];
+    const out=[];
+    (mapping.regras||[]).forEach(r=>{
+      if(!r || !r.produto_id) return;
+      const qb=r.quantidade_baixa||0; if(!qb) return;
+      if((r.unidade||"un").toLowerCase()==="ml"){
+        const p=prodById&&prodById[r.produto_id], cap=(p&&p.capacidade_ml)||0;
+        if(cap>0){ out.push({produto_id:r.produto_id, unidades:(qtd*qb)/cap}); return; }
+      }
+      out.push({produto_id:r.produto_id, unidades: qtd*qb});
+    });
+    return out;
   },
 
   // Motor principal. Fórmula por produto: esperado = antes + compras − venda − cortesia + estorno;

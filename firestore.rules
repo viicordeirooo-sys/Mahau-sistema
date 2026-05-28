@@ -6,29 +6,156 @@ rules_version = '2';
 // ⚠️ ESTE ARQUIVO É REFERÊNCIA / VERSIONAMENTO.
 // As regras são aplicadas pelo console do Firebase
 // (Firestore Database → Regras → colar → Publicar), NÃO por deploy automático.
+// Reversão: o console mantém histórico — basta republicar a versão anterior.
 //
-// ROLLOUT (Item 1):
-//   • Passo 5 (e só ele): substituir a regra ABERTA atual pela regra TRAVADA abaixo.
-//   • Antes disso, o app de login (com regras ainda abertas) já deve estar no ar
-//     e validado, e a conta de usuário já criada no Authentication.
-//   • Reversão: o console mantém histórico — basta republicar a versão anterior.
+// Histórico de versões desta política:
+//   v1  ABERTA      → allow read, write: if true;            (banco público)
+//   v2  AUTENTICADA → allow read, write: if request.auth != null;
+//   v3  RBAC        → ESTA versão (papéis por custom claim "role").
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// ── MODELO RBAC ────────────────────────────────────────────────────────────────
+// Papel vem do custom claim "role" no token JWT (setado por set-claims.mjs, fora
+// daqui). Sem auth / sem role / role desconhecido  →  NEGA TUDO (deny-by-default).
+//
+//   R = read · W = create/update · D = delete (permanente)
+//   OBS: soft-delete e restore são UPDATE (gravam/limpam `deletedAt`), logo entram
+//        em W — quem tem W numa coleção pode mandar p/ a Lixeira e restaurar nela.
+//        D (delete real do Firestore) = exclusão permanente, só admin.
+//
+//   ┌──────────────────────┬───────┬─────────┬───────┐
+//   │ Coleção              │ admin │ manager │ staff │
+//   ├──────────────────────┼───────┼─────────┼───────┤
+//   │ produtos             │ RWD   │ RW      │ R     │
+//   │ mapeamento_zig       │ RWD   │ RW      │ R     │
+//   │ semanas_conciliacao  │ RWD   │ RW      │ R     │
+//   │ estoques             │ RWD   │ RW      │ RW    │
+//   │ vendas_zig           │ RWD   │ RW      │ RW    │
+//   │ fichas               │ RWD   │ R       │ —     │
+//   │ compras              │ RWD   │ R       │ —     │
+//   │ eventos              │ RWD   │ R       │ —     │
+//   │ custos               │ RWD   │ R       │ —     │
+//   │ inventarios          │ RWD   │ R       │ —     │
+//   │ inventarios_mensais  │ RWD   │ R       │ —     │
+//   │ cortesias_semana     │ RWD   │ R       │ —     │
+//   │ estornos_semana      │ RWD   │ R       │ —     │
+//   │ conciliacoes         │ RWD   │ R       │ —     │
+//   │ config/*             │ RWD   │ R       │ —     │
+//   │ lixeira/*            │ RWD   │ —       │ —     │
+//   └──────────────────────┴───────┴─────────┴───────┘
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── REGRA ATUAL (ABERTA) — banco público. NÃO deixar assim em produção. ──
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     match /{document=**} {
-//       allow read, write: if true;
-//     }
-//   }
-// }
-
-// ── REGRA ALVO (Fase 3.1): exige usuário autenticado. ──
-// Isolamento por empresa (orgId) virá na Fase 3.3 (multi-tenant).
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function role()      { return request.auth != null ? request.auth.token.role : null; }
+    function isAdmin()   { return role() == "admin"; }
+    function isManager() { return role() == "manager"; }
+    function isStaff()   { return role() == "staff"; }
+
+    // ── TIER A · operacional restrito ─────────────────────────────────────────
+    //    read: admin + manager   ·   create/update + delete: admin
+    match /fichas/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /compras/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /eventos/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /custos/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /inventarios/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /inventarios_mensais/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /cortesias_semana/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /estornos_semana/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+    match /conciliacoes/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+
+    // ── TIER B · catálogo / mapeamento compartilhado ──────────────────────────
+    //    read: admin + manager + staff   ·   create/update: admin + manager   ·   delete: admin
+    match /produtos/{doc} {
+      allow read:           if isAdmin() || isManager() || isStaff();
+      allow create, update: if isAdmin() || isManager();
+      allow delete:         if isAdmin();
+    }
+    match /mapeamento_zig/{doc} {
+      allow read:           if isAdmin() || isManager() || isStaff();
+      allow create, update: if isAdmin() || isManager();
+      allow delete:         if isAdmin();
+    }
+    match /semanas_conciliacao/{doc} {
+      allow read:           if isAdmin() || isManager() || isStaff();
+      allow create, update: if isAdmin() || isManager();
+      allow delete:         if isAdmin();
+    }
+
+    // ── TIER C · contagem / saída operacional ─────────────────────────────────
+    //    read + create/update: admin + manager + staff   ·   delete: admin
+    match /estoques/{doc} {
+      allow read:           if isAdmin() || isManager() || isStaff();
+      allow create, update: if isAdmin() || isManager() || isStaff();
+      allow delete:         if isAdmin();
+    }
+    match /vendas_zig/{doc} {
+      allow read:           if isAdmin() || isManager() || isStaff();
+      allow create, update: if isAdmin() || isManager() || isStaff();
+      allow delete:         if isAdmin();
+    }
+
+    // ── config (singleton config/settings) ────────────────────────────────────
+    //    read: admin + manager   ·   create/update + delete: admin
+    match /config/{doc} {
+      allow read:           if isAdmin() || isManager();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+
+    // ── lixeira ───────────────────────────────────────────────────────────────
+    //    admin only. NOTA: hoje NÃO existe coleção `lixeira` — a Lixeira do app é o
+    //    campo `deletedAt` nos docs das coleções acima (soft-delete = update). Esta
+    //    regra é defensiva/forward-looking caso uma coleção `lixeira` passe a existir.
+    match /lixeira/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── DEFAULT DENY ───────────────────────────────────────────────────────────
+    //    O Firestore já nega por padrão tudo que não casa com um `allow` acima;
+    //    esta regra explícita deixa a intenção registrada e cobre subcoleções
+    //    inesperadas. Regras são ADITIVAS: este `if false` NÃO revoga os allows
+    //    específicos acima.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

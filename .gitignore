@@ -20,5 +20,9 @@ credentials.json
 secrets.json
 service-account*.json
 
+# Firebase Admin SDK keys (default download names)
+*-firebase-adminsdk-*.json
+roles.json
+
 # Config local do Claude Code (não depender do exclude global do git)
 .claude/

@@ -388,9 +388,10 @@ const S = {
 };
 
 // ── FORMATTERS ────────────────────────────────────────────────────────────────
-const R  = v=>(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0});
-const Rf = v=>(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-const P  = v=>`${((v||0)*100).toFixed(1)}%`;
+const R  = v=>Number.isFinite(v)?(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}):(console.warn("R() recebeu valor não-finito:",v,new Error().stack),"R$ —");
+const Rf = v=>Number.isFinite(v)?(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}):(console.warn("Rf() recebeu valor não-finito:",v,new Error().stack),"R$ —");
+const P  = v=>Number.isFinite(v)?`${((v||0)*100).toFixed(1)}%`:(console.warn("P() recebeu valor não-finito:",v,new Error().stack),"—%");
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const chip=(t,c)=>`<span class="badge" style="background:${c}18;color:${c}">${t}</span>`;
 const el  = id=>document.getElementById(id);
 const set = (id,h)=>{const e=el(id);if(e)e.innerHTML=h;};
@@ -621,7 +622,7 @@ function renderDash(){
         <tbody>${alrs.map(p=>{
           const atual=estoqueAtual(p.id);
           return`<tr>
-            <td class="w6">${p.nome}</td>
+            <td class="w6">${esc(p.nome)}</td>
             <td class="mt">${p.categoria||""}</td>
             <td class="r mn tag-red">${atual.toFixed(1)} ${p.unidade||"un"}</td>
             <td class="r mn">${p.estoque_min||0} ${p.unidade||"un"}</td>
@@ -696,7 +697,7 @@ function renderProd(){
           const mg=p.preco_venda&&p.preco_compra?((p.preco_venda-p.preco_compra)/p.preco_venda):null;
           const alr=(p.estoque_min||0)>0 && atual<(p.estoque_min||0);
           return`<tr>
-            <td class="w6">${p.nome}</td>
+            <td class="w6">${esc(p.nome)}</td>
             <td class="mt">${p.categoria||""}</td>
             <td class="r mn mt">${p.capacidade_ml||"—"}ml</td>
             <td class="r mn">${p.preco_compra?Rf(p.preco_compra):"—"}</td>
@@ -786,7 +787,7 @@ function renderBulkEdit(){
           const ini=bc.estoque_inicial!==undefined?bc.estoque_inicial:p.estoque_inicial||"";
           const dirty=Object.keys(bc).length>0;
           return`<tr style="${dirty?"background:rgba(245,158,11,.05)":""}">
-            <td class="w6">${p.nome}</td>
+            <td class="w6">${esc(p.nome)}</td>
             <td class="mt" style="font-size:10px">${p.categoria||""}</td>
             <td><input class="bulk-inp${dirty&&bc.preco_compra!==undefined?" bulk-dirty":""}" type="number" value="${cu}" step="0.01" placeholder="0.00"
               onchange="setBulk('${p.id}','preco_compra',parseFloat(this.value)||0);this.classList.add('bulk-dirty');updateBulkMargem('${p.id}')"></td>
@@ -860,6 +861,28 @@ function renderFichas(){
   const formHTML=fichaForm!==null?renderFichaForm():"";
 
   const semFichas = S.fichas.length===0;
+
+  // Pré-passo: custo + diagnóstico de cada ficha numa só chamada (reusado na tabela e nas faixas).
+  const calc=rows.map(f=>({f, det:Domain.calcCustoFichaDetalhado(f, S.produtos)}));
+  const fichasComOrfaos=[];
+  const incompletosByPid={};
+  calc.forEach(({f,det})=>{
+    if(det.orfaos.length) fichasComOrfaos.push(f.nome||"(sem nome)");
+    det.incompletos.forEach(it=>{ incompletosByPid[it.produto_id]=it; });
+  });
+  const incompletos=Object.values(incompletosByPid);
+  let avisosFichas="";
+  if(fichasComOrfaos.length){
+    const nomes=fichasComOrfaos.map(esc).join(", ");
+    avisosFichas+=`<div class="alert-strip">⚠ ${fichasComOrfaos.length} ficha(s) com ingredientes removidos: ${nomes} — custo/margem dessas fichas <strong>SUBESTIMADOS</strong>. Reedite a ficha removendo o ingrediente ou restaure o produto da Lixeira.</div>`;
+  }
+  if(incompletos.length){
+    const lista=incompletos.map(it=>{
+      const faltas=[it.semPreco?"sem preço":"", it.semCapacidade?"sem capacidade":""].filter(Boolean).join(", ");
+      return `${esc(it.nome_produto||it.produto_id)} (${faltas})`;
+    }).join(", ");
+    avisosFichas+=`<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">⚠ ${incompletos.length} produto(s) sem cadastro completo: ${lista} — custo/margem das fichas que os usam <strong>SUBESTIMADOS</strong>. Complete em Produtos.</div>`;
+  }
   set("p-fichas",`
     <div class="pg-h">
       <div><div class="eyebrow">RECEITAS & ML</div><div class="pg-t">Fichas Técnicas</div></div>
@@ -873,22 +896,23 @@ function renderFichas(){
     <div class="flt">
       <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar drink..." value="${fichaQ}" oninput="fichaQ=this.value;renderFichas()"></div>
     </div>
+    ${avisosFichas}
     <div class="box">
       <div class="bh"><span class="bt">${rows.length} fichas cadastradas</span></div>
       <div class="tw"><table>
         <thead><tr><th>Drink</th><th>Categoria</th><th class="r">Venda</th><th class="r">Custo (CMV)</th><th class="r">Margem</th><th>Ingredientes</th><th></th></tr></thead>
-        <tbody>${rows.length?rows.map(f=>{
-          const custo=calcCustoFicha(f);
+        <tbody>${calc.length?calc.map(({f,det})=>{
+          const custo=det.custo;
           const mg=f.preco_venda&&custo?((f.preco_venda-custo)/f.preco_venda):null;
           return`<tr>
-            <td class="w6">${f.nome}</td>
+            <td class="w6">${esc(f.nome)}</td>
             <td class="mt">${f.categoria||""}</td>
             <td class="r mn">${f.preco_venda?Rf(f.preco_venda):"—"}</td>
             <td class="r mn">${custo?Rf(custo):"—"}</td>
             <td class="r">${mg!==null?chip(P(mg),mg>0.65?"#22c55e":mg>0.50?"#f59e0b":"#ef4444"):"—"}</td>
             <td class="mt" style="font-size:10px">${(f.ingredientes||[]).map(i=>{
               const p=S.produtos.find(x=>x.id===i.produto_id);
-              const label = i.tipo==="mixer"?`5× ${p?p.nome:"?"}`:p?`${p.nome} (garrafa)`:"?";
+              const label = i.tipo==="mixer"?`5× ${p?esc(p.nome):"?"}`:p?`${esc(p.nome)} (garrafa)`:"?";
               return label;
             }).join(" + ")||"—"}</td>
             <td style="white-space:nowrap">
@@ -902,8 +926,6 @@ function renderFichas(){
     </div>
   `);
 }
-
-function calcCustoFicha(f){ return Domain.calcCustoFicha(f, S.produtos); }
 
 function renderFichaForm(){
   const ings=fichaForm.ingredientes||[];
@@ -999,7 +1021,7 @@ function renderEstoque(){
           const alr=p.atual<=(p.estoque_min||0);
           const status=alr?chip("⚠ Baixo","#ef4444"):chip("✓ OK","#22c55e");
           return`<tr>
-            <td class="w6">${p.nome}</td>
+            <td class="w6">${esc(p.nome)}</td>
             <td class="mt">${p.categoria||""}</td>
             <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${p.atual.toFixed(1)} ${p.unidade||"un"}</td>
             <td class="r mn mt">${p.estoque_min||0} ${p.unidade||"un"}</td>
@@ -1047,10 +1069,10 @@ function renderCatalogoImport(){
       <div class="tw"><table>
         <thead><tr><th>Produto</th><th>Dep.</th><th class="r">Contado</th><th>Medida</th><th class="r">Custo</th><th>Situação</th></tr></thead>
         <tbody>${imp.itens.map(i=>`<tr style="${i.novo?"background:rgba(245,158,11,.05)":i.negativo?"background:rgba(239,68,68,.05)":""}">
-          <td class="w6">${i.nome}</td>
-          <td class="mt" style="font-size:10px">${i.departamento||""}</td>
+          <td class="w6">${esc(i.nome)}</td>
+          <td class="mt" style="font-size:10px">${esc(i.departamento)}</td>
           <td class="r mn">${i.estoque_contado}</td>
-          <td class="mt">${i.medida||""}</td>
+          <td class="mt">${esc(i.medida)}</td>
           <td class="r mn">${i.custo?Rf(i.custo):"—"}</td>
           <td>${i.novo?chip("novo","#f59e0b"):chip("atualiza","#2563eb")}${i.custoVariou?chip("custo↑","#f59e0b"):""}${i.negativo?chip("negativo","#ef4444"):""}</td>
         </tr>`).join("")}</tbody>
@@ -1162,7 +1184,7 @@ function renderListaCompras(){
       <div class="tw"><table>
         <thead><tr><th>Produto</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Sugestão compra</th><th class="r">Custo est.</th></tr></thead>
         <tbody>${criticos.map(p=>`<tr>
-          <td class="w6">${p.nome}</td>
+          <td class="w6">${esc(p.nome)}</td>
           <td class="r mn inv-bad">${p.atual.toFixed(1)} ${p.unidade||"un"}</td>
           <td class="r mn">${p.estoque_min} ${p.unidade||"un"}</td>
           <td class="r mn" style="color:#3b82f6;font-weight:700">${p.sugestao} ${p.unidade||"un"}</td>
@@ -1427,18 +1449,24 @@ function importVendidosHTML(ev){
   if(nm.skus.length||nm.nomes.length){
     html+=`<div class="box"><div class="bh"><span class="bt">⚠ Não mapeados — não baixam nada</span></div>
       <div class="tw"><table><thead><tr><th>Origem</th><th>Item</th><th class="r">Qtd Zig</th><th class="r">Ação</th></tr></thead><tbody>
-      ${nm.skus.map((s,i)=>`<tr><td class="mn mt">SKU ${s.sku}</td><td class="w6">${s.nome||""}</td><td class="r mn">${s.quantidade}</td>
+      ${nm.skus.map((s,i)=>`<tr><td class="mn mt">SKU ${esc(s.sku)}</td><td class="w6">${esc(s.nome)}</td><td class="r mn">${s.quantidade}</td>
         <td class="r"><button class="btn bg_ bsm" onclick="mapearNaoMapeado('sku',${i})">mapear</button></td></tr>`).join("")}
-      ${nm.nomes.map((n,i)=>`<tr><td class="mn">montável</td><td class="w6">${n.nome||""}</td><td class="r mn">${n.quantidade}</td>
+      ${nm.nomes.map((n,i)=>`<tr><td class="mn">montável</td><td class="w6">${esc(n.nome)}</td><td class="r mn">${n.quantidade}</td>
         <td class="r"><button class="btn bg_ bsm" onclick="mapearNaoMapeado('nome',${i})">mapear</button></td></tr>`).join("")}
       </tbody></table></div>
       <div style="font-size:10px;color:#484f58;padding:6px 10px">Modifiers (ponto da carne, "sem limão", adicionais) aparecem aqui e devem mesmo ficar <strong>sem</strong> mapeamento.</div>
     </div>`;
   }
 
+  const semCap=nm.semCapacidade||[];
+  if(semCap.length){
+    const nomes=semCap.map(x=>esc(x.nome_produto||x.produto_id)).join(", ");
+    html+=`<div class="alert-strip">⚠ ${semCap.length} produto(s) com baixa em ml mas sem capacidade cadastrada — <strong>NÃO baixaram estoque</strong> (o estoque desses produtos está acima do real): ${nomes}. Corrija a <strong>Capacidade (ml)</strong> em Produtos ou mude a unidade da regra para "un".</div>`;
+  }
+
   html+=`<div class="box"><div class="bh"><span class="bt">Baixa no estoque — ${linhas.length} produto(s)</span></div>
     <div class="tw"><table><thead><tr><th>Produto</th><th class="r">Unidades a baixar</th></tr></thead><tbody>
-    ${linhas.length?linhas.map(l=>`<tr><td class="w6">${l.nome}</td><td class="r mn">${fmtU(l.un)}</td></tr>`).join(""):`<tr><td colspan="2"><div class="empty">Nada a baixar — mapeie os itens acima.</div></td></tr>`}
+    ${linhas.length?linhas.map(l=>`<tr><td class="w6">${esc(l.nome)}</td><td class="r mn">${fmtU(l.un)}</td></tr>`).join(""):`<tr><td colspan="2"><div class="empty">Nada a baixar — mapeie os itens acima.</div></td></tr>`}
     </tbody></table></div></div>`;
 
   html+=`<div class="fb">
@@ -1595,7 +1623,7 @@ function renderCustos(){
       <thead><tr><th>Custo</th><th class="r">Mensal</th><th class="r">Rateio/Evento</th><th class="r">Part.%</th><th></th></tr></thead>
       <tbody>
         ${S.custos.length?S.custos.map(c=>`<tr>
-          <td class="w6">${c.nome}</td>
+          <td class="w6">${esc(c.nome)}</td>
           <td class="r mn">${R(c.valor)}</td>
           <td class="r mn mt">${R((c.valor||0)/S.config.datasNoMes)}</td>
           <td class="r">
@@ -1694,7 +1722,7 @@ function renderInventario(){
           const dVal=desvio!==null?desvio*(p.preco_compra||0):null;
           const dc=desvio===null?"":desvio>0.5?"inv-ok":desvio<-0.5?"inv-bad":"inv-warn";
           return`<tr>
-            <td class="w6">${p.nome}</td>
+            <td class="w6">${esc(p.nome)}</td>
             <td class="mt" style="font-size:10px">${p.categoria||""}</td>
             <td class="r mn">${teo.toFixed(2)} ${p.unidade||"un"}</td>
             <td><input class="bulk-inp" type="number" step="0.5" placeholder="—" value="${fis}"
@@ -1791,7 +1819,7 @@ function renderInventarioMensal(pills){
           const fis = invMensalContagens[key]!==undefined ? invMensalContagens[key] : "";
           const valorLinha = fis!==""&&fis!==undefined ? (parseFloat(fis)||0)*(p.preco_compra||0) : null;
           return `<tr>
-            <td class="w6">${p.nome}</td>
+            <td class="w6">${esc(p.nome)}</td>
             <td class="mt" style="font-size:10px">${p.categoria||""}</td>
             <td class="r mn mt">${salvo!==null?salvo:"—"}</td>
             <td class="r mn mt">${Rf(p.preco_compra||0)}</td>
@@ -1845,6 +1873,14 @@ async function salvarInventarioMensal(){
   alert(`Contagem mensal de ${fmtMes(mes)} salva!\n${Object.keys(contagens).length} produtos · valor do estoque ${R(Domain.valorInventario(contagens,S.produtos))}.`);
 }
 
+// Resolve um produto_id órfão de contagem: soft-deletado (achável no _trash, tem nome → restaurável)
+// vs hard-deletado (sumiu de vez → só o id, reeditar inventário).
+function resolveOrfao(pid){
+  const t=(S._trash.produtos||[]).find(p=>p.id===pid);
+  return t ? {produto_id:pid, nome:t.nome||"(sem nome)", status:"soft"}
+           : {produto_id:pid, nome:null, status:"hard"};
+}
+
 // CMV Real (contábil) do mês selecionado: Estoque Inicial (mês anterior) + Compras − Estoque Final.
 // Encadeado: o inventário mensal de M−1 é o estoque inicial de M.
 function cmvRealMensal(){
@@ -1853,10 +1889,14 @@ function cmvRealMensal(){
   const invFinal=S.inventarios_mensais.find(i=>i.mes===mes);
   const invInicial=S.inventarios_mensais.find(i=>i.mes===mesPrev);
   const compras=totalComprasMes();
-  const final$=invFinal?Domain.valorInventario(invFinal.contagens,S.produtos):null;
-  const inicial$=invInicial?Domain.valorInventario(invInicial.contagens,S.produtos):null;
+  const detFinal=invFinal?Domain.valorInventarioDetalhado(invFinal.contagens,S.produtos):null;
+  const detInicial=invInicial?Domain.valorInventarioDetalhado(invInicial.contagens,S.produtos):null;
+  const final$=detFinal?detFinal.valor:null;
+  const inicial$=detInicial?detInicial.valor:null;
   const cmv=(invFinal&&invInicial)?(inicial$+compras-final$):null;
-  return {mes,mesPrev,inicial$,final$,compras,cmv,temFinal:!!invFinal,temInicial:!!invInicial};
+  const orfaosBy={};
+  [detFinal,detInicial].forEach(d=>{ if(d) d.orfaos.forEach(o=>{ if(!orfaosBy[o.produto_id]) orfaosBy[o.produto_id]=resolveOrfao(o.produto_id); }); });
+  return {mes,mesPrev,inicial$,final$,compras,cmv,temFinal:!!invFinal,temInicial:!!invInicial, orfaos:Object.values(orfaosBy)};
 }
 
 // Bloco visual CMV Real (e, se `teorico` for passado, comparação com o teórico + desvio).
@@ -1891,7 +1931,16 @@ function blocoCmvReal(teorico){
       </div>`).join("");
     if(teorico!=null) inner+=`<div style="font-size:10px;color:#484f58;margin-top:8px">Desvio positivo = saiu mais estoque do que as vendas explicam (perdas/quebras/erros).</div>`;
   }
-  return `<div class="box"><div class="bh"><span class="bt">CMV Real (inventário)${teorico!=null?" vs Teórico":""}</span></div><div class="bb">${inner}</div></div>`;
+  const orfaos=cr.orfaos||[];
+  let faixaOrfaos="";
+  if(orfaos.length){
+    const soft=orfaos.filter(o=>o.status==="soft"), hard=orfaos.filter(o=>o.status==="hard");
+    const partes=[];
+    if(soft.length) partes.push(`${soft.length} na Lixeira (${soft.map(o=>esc(o.nome)).join(", ")}) — restaure da Lixeira`);
+    if(hard.length) partes.push(`${hard.length} excluído(s) definitivamente — reedite o inventário`);
+    faixaOrfaos=`<div class="alert-strip">⚠ ${orfaos.length} produto(s) contado(s) foram removidos e entraram como R$ 0 — o CMV Real pode estar INCORRETO: ${partes.join("; ")}.</div>`;
+  }
+  return `<div class="box"><div class="bh"><span class="bt">CMV Real (inventário)${teorico!=null?" vs Teórico":""}</span></div><div class="bb">${faixaOrfaos}${inner}</div></div>`;
 }
 
 
@@ -2096,7 +2145,27 @@ async function seedCombos(){
 
 // ── SOFT-DELETE / LIXEIRA ─────────────────────────────────────────────────────
 // ✕ nas telas faz soft-delete (vai para a Lixeira). Exclusão permanente só aqui.
-function softDel(col,id){ if(confirm("Mover para a lixeira?")) FS.del(col,id); }
+function softDel(col,id){
+  if(col==="produtos"){
+    const fichasUsam = S.fichas.filter(f=>(f.ingredientes||[]).some(i=>i.produto_id===id));
+    const nI = [...S.inventarios, ...S.inventarios_mensais].filter(inv=>inv.contagens && (id in inv.contagens)).length;
+    const nM = S.mapeamento_zig.filter(m=>(m.regras||[]).some(r=>r.produto_id===id) || m.mixer_produto_id===id).length;
+    if(fichasUsam.length || nI || nM){
+      const partes=[];
+      if(fichasUsam.length){
+        const nomes=fichasUsam.slice(0,5).map(f=>f.nome||"(sem nome)").join(", ");
+        const extra=fichasUsam.length>5?` e mais ${fichasUsam.length-5}`:"";
+        partes.push(`${fichasUsam.length} ficha(s) (${nomes}${extra})`);
+      }
+      if(nI) partes.push(`${nI} inventário(s)`);
+      if(nM) partes.push(`${nM} regra(s) de mapeamento Zig`);
+      if(!confirm(`Este produto é usado em ${partes.join(" · ")}. Após mover para a Lixeira, esses cálculos (custo de ficha, CMV, baixa Zig) ficam incompletos até você restaurá-lo. Mover mesmo assim?`)) return;
+      FS.del(col,id);
+      return;
+    }
+  }
+  if(confirm("Mover para a lixeira?")) FS.del(col,id);
+}
 function restaurarDoc(col,id){ FS.restore(col,id); }
 
 // Soft-delete de evento (sem cascata — não há mais vendas por evento).
@@ -2350,10 +2419,10 @@ function concilEstoqueHTML(){
       <div class="tw"><table>
         <thead><tr><th>Produto</th><th>Dep.</th><th class="r">Contado</th><th>Medida</th><th class="r">Custo</th><th>Situação</th></tr></thead>
         <tbody>${imp.itens.map(i=>`<tr style="${i.novo?"background:rgba(245,158,11,.05)":i.negativo?"background:rgba(239,68,68,.05)":""}">
-          <td class="w6">${i.nome}</td>
-          <td class="mt" style="font-size:10px">${i.departamento||""}</td>
+          <td class="w6">${esc(i.nome)}</td>
+          <td class="mt" style="font-size:10px">${esc(i.departamento)}</td>
           <td class="r mn">${i.estoque_contado}</td>
-          <td class="mt">${i.medida||""}</td>
+          <td class="mt">${esc(i.medida)}</td>
           <td class="r mn">${i.custo?Rf(i.custo):"—"}</td>
           <td>${i.novo?chip("novo","#f59e0b"):""}${i.custoVariou?chip("custo↑","#f59e0b"):""}${i.negativo?chip("negativo","#ef4444"):""}${(!i.novo&&!i.custoVariou&&!i.negativo)?chip("ok","#22c55e"):""}</td>
         </tr>`).join("")}</tbody>
@@ -2453,7 +2522,7 @@ function concilVendasHTML(){
       <div class="tw"><table>
         <thead><tr><th>SKU</th><th>Produto</th><th class="r">Quantidade</th></tr></thead>
         <tbody>${imp.itens.slice().sort((a,b)=>(b.quantidade||0)-(a.quantidade||0)).map(v=>`<tr>
-          <td class="mn mt">${v.sku||""}</td><td class="w6">${v.produto||""}</td><td class="r mn">${v.quantidade||0}</td>
+          <td class="mn mt">${esc(v.sku)}</td><td class="w6">${esc(v.produto)}</td><td class="r mn">${v.quantidade||0}</td>
         </tr>`).join("")}</tbody>
       </table></div>
     </div>`;
@@ -2537,7 +2606,7 @@ function concilCortesiasHTML(){
       <div class="tw"><table>
         <thead><tr><th>Promoter</th><th>Produto</th><th>Categoria</th><th class="r">Valor</th></tr></thead>
         <tbody>${imp.itens.slice().sort((a,b)=>(b.valor_brl||0)-(a.valor_brl||0)).map(v=>`<tr>
-          <td class="mt">${v.promoter||""}</td><td class="w6">${v.produto||""}</td><td class="mt">${v.categoria||""}</td><td class="r mn">${Rf(v.valor_brl||0)}</td>
+          <td class="mt">${esc(v.promoter)}</td><td class="w6">${esc(v.produto)}</td><td class="mt">${esc(v.categoria)}</td><td class="r mn">${Rf(v.valor_brl||0)}</td>
         </tr>`).join("")}</tbody>
       </table></div>
     </div>`;
@@ -2632,7 +2701,7 @@ function concilEstornosHTML(){
       <div class="tw"><table>
         <thead><tr><th>Data</th><th>Produto</th><th>Categoria</th><th>Motivo</th><th class="r">Qtd</th><th class="r">Valor</th></tr></thead>
         <tbody>${lista.length?lista.slice().sort((a,b)=>(b.valor||0)-(a.valor||0)).map(v=>`<tr>
-          <td class="mn mt">${fmtData(v.data)}</td><td class="w6">${v.produto||""}</td><td class="mt">${v.categoria||""}</td><td class="mt" style="font-size:10px">${v.motivo||""}</td><td class="r mn">${v.quantidade||0}</td><td class="r mn">${Rf(v.valor||0)}</td>
+          <td class="mn mt">${fmtData(v.data)}</td><td class="w6">${esc(v.produto)}</td><td class="mt">${esc(v.categoria)}</td><td class="mt" style="font-size:10px">${esc(v.motivo)}</td><td class="r mn">${v.quantidade||0}</td><td class="r mn">${Rf(v.valor||0)}</td>
         </tr>`).join(""):`<tr><td colspan="6" class="empty">Nenhum ${view==="cancelado"?"cancelado":"estornado"}.</td></tr>`}</tbody>
       </table></div>
     </div>`;
@@ -2687,11 +2756,11 @@ async function salvarEstornos(){
 // ── Conciliação · aba Mapeamento Zig→Estoque (1d) ─────────────────────────────
 function resumoMapa(m){
   if(m.tipo==="ignorar") return "ignorado";
-  if(m.tipo==="combo") return `${m.redbull_qtd||0}× ${m.mixer_nome||"mixer?"} (garrafa via montável)`;
+  if(m.tipo==="combo") return `${m.redbull_qtd||0}× ${esc(m.mixer_nome)||"mixer?"} (garrafa via montável)`;
   const rs=(m.regras||[]).filter(r=>r&&r.produto_id);
   if(rs.length>1) return `${rs.length} ingredientes`;
   const r=rs[0];
-  return r?`→ ${r.nome_produto||r.produto_id||"?"} (${r.quantidade_baixa} ${r.unidade})`:"—";
+  return r?`→ ${esc(r.nome_produto||r.produto_id)||"?"} (${r.quantidade_baixa} ${esc(r.unidade)})`:"—";
 }
 
 function mapaFormHTML(){
@@ -2783,6 +2852,7 @@ function salvarMapa(){
       if(!validar([[pid,"Selecione o produto em todas as linhas de ingrediente."],[qtd>0,"A quantidade de baixa deve ser maior que zero em todas as linhas."]])) return;
       if(vistos.has(pid)){ toast("Produto repetido nos ingredientes: "+(p?p.nome:pid)+". Some as quantidades numa linha só.","err","Ingrediente duplicado"); return; }
       vistos.add(pid);
+      if((un||"").toLowerCase()==="ml" && !(p && p.capacidade_ml>0)){ toast(`"${p?p.nome:pid}" baixa em ml mas não tem Capacidade (ml) cadastrada. Cadastre a capacidade do produto ou mude a unidade desta regra para "un".`,"err","Capacidade (ml) ausente"); return; }
       regras.push({produto_id:pid, nome_produto:p?p.nome:"", quantidade_baixa:qtd, unidade:un, fonte});
     }
     doc.regras=regras;
@@ -2812,8 +2882,8 @@ function concilMapaHTML(){
       </div>
       <div class="tw"><table><thead><tr><th>SKU</th><th>Nome (Zig)</th><th class="r">Ação</th></tr></thead>
       <tbody>${naoMapF.length?naoMapF.map(s=>`<tr style="background:rgba(245,158,11,.05)">
-        <td class="mn">${s.sku}</td><td class="w6">${s.nome}</td>
-        <td class="r"><button class="btn bp bsm" data-n="${(s.nome||"").replace(/"/g,"&quot;")}" onclick="novoMapa('${s.sku}',this.dataset.n)">Mapear</button></td>
+        <td class="mn">${esc(s.sku)}</td><td class="w6">${esc(s.nome)}</td>
+        <td class="r"><button class="btn bp bsm" data-sku="${esc(s.sku)}" data-n="${esc(s.nome)}" onclick="novoMapa(this.dataset.sku,this.dataset.n)">Mapear</button></td>
       </tr>`).join(""):`<tr><td colspan="3" class="empty">Nenhum SKU corresponde a "${q.replace(/"/g,"&quot;")}".</td></tr>`}</tbody></table></div>
     </div>`:(S.vendas_zig.length?`<div class="ok-strip">Todos os SKUs da Saída importada estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe a Saída Geral (aba 📊) para detectar SKUs a mapear.</div>`)}
     <div class="box">
@@ -2821,7 +2891,7 @@ function concilMapaHTML(){
       <div class="tw"><table>
         <thead><tr><th>SKU</th><th>Nome (Zig)</th><th>Tipo</th><th>Baixa</th><th></th></tr></thead>
         <tbody>${maps.length?maps.map(m=>`<tr>
-          <td class="mn">${m.sku_zig||""}</td><td class="w6">${m.nome_zig||""}</td>
+          <td class="mn">${esc(m.sku_zig)}</td><td class="w6">${esc(m.nome_zig)}</td>
           <td>${chip(m.tipo||"?",m.tipo==="ignorar"?"#484f58":m.tipo==="combo"?"#8b5cf6":"#2563eb")}</td>
           <td class="mt" style="font-size:10px">${resumoMapa(m)}</td>
           <td style="white-space:nowrap"><button class="bi" onclick="editarMapa('${m.id}')">✏</button><button class="bi" onclick="softDel('mapeamento_zig','${m.id}')">✕</button></td>
@@ -2885,6 +2955,12 @@ function concilResultadoHTML(){
   if(meta.estornos_sem_mapa) avisos.push(`${meta.estornos_sem_mapa} estorno(s) sem mapeamento`);
   if(avisos.length) html+=`<div class="alert-strip" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.25);color:#f59e0b">⚠ Ficou de fora do cálculo: ${avisos.join(" · ")}.</div>`;
 
+  const semCap=meta.ml_sem_capacidade||[];
+  if(semCap.length){
+    const nomes=semCap.map(x=>esc(x.nome_produto||x.produto_id)).join(", ");
+    html+=`<div class="alert-strip">⚠ ${semCap.length} produto(s) com baixa em ml mas sem capacidade cadastrada — <strong>NÃO baixaram estoque</strong> (o estoque desses produtos está acima do real): ${nomes}. Corrija a <strong>Capacidade (ml)</strong> em Produtos ou mude a unidade da regra para "un".</div>`;
+  }
+
   const filtro=concilResultFiltro||"todos";
   const fbtn=(id,label)=>`<button class="pill${filtro===id?" on":""}" onclick="concilResultFiltro='${id}';renderConciliacao()">${label}</button>`;
   html+=`<div class="fb"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
@@ -2903,7 +2979,7 @@ function concilResultadoHTML(){
     <div class="tw"><table>
       <thead><tr><th>Produto</th><th class="r">Antes</th><th class="r">Compras</th><th class="r">Venda</th><th class="r">Cortesia</th><th class="r">Estorno</th><th class="r">Esperado</th><th class="r">Real</th><th class="r">Desvio</th><th class="r">R$</th><th>Status</th></tr></thead>
       <tbody>${rows.length?rows.map(r=>`<tr style="${tint[r.status]||""}">
-        <td class="w6">${r.nome}</td>
+        <td class="w6">${esc(r.nome)}</td>
         <td class="r mn">${fmtU(r.antes)}</td><td class="r mn">${fmtU(r.compras)}</td><td class="r mn">${fmtU(r.venda)}</td>
         <td class="r mn">${fmtU(r.cortesia)}</td><td class="r mn">${fmtU(r.estorno)}</td><td class="r mn">${fmtU(r.esperado)}</td>
         <td class="r mn">${fmtU(r.real)}</td>
@@ -2966,7 +3042,6 @@ function exportarConciliacaoPDF(){
   const sel=S.concilSemanaSel, doc=S.conciliacoes.find(c=>c.semana_id===sel);
   if(!doc){ toast("Gere a conciliação primeiro.","err"); return; }
   const ct=doc.contagem||{};
-  const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const rows=(doc.resultados||[]).filter(r=>r.status!=="ok"); // PDF foca no acionável
   const trs=rows.map(r=>`<tr class="${r.status}"><td>${esc(r.nome)}</td><td class=n>${fmtU(r.antes)}</td><td class=n>${fmtU(r.compras)}</td><td class=n>${fmtU(r.venda)}</td><td class=n>${fmtU(r.cortesia)}</td><td class=n>${fmtU(r.estorno)}</td><td class=n>${fmtU(r.esperado)}</td><td class=n>${fmtU(r.real)}</td><td class=n>${r.desvio>0?"+":""}${fmtU(r.desvio)}</td><td class=n>${r.valor_rs?R(r.valor_rs):"—"}</td><td>${STAT_CONCIL[r.status][0]}</td></tr>`).join("");
   const win=window.open("","_blank");

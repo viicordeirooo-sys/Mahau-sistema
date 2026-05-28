@@ -35,12 +35,23 @@ const Domain = {
     return {...(data||{}), orgId:(data&&data.orgId)||"default", createdAt:ts, updatedAt:ts};
   },
 
-  // Valor (R$) de uma contagem física de inventário: Σ qtd × preco_compra.
-  valorInventario(contagens, produtos){
-    if(!contagens) return 0;
-    const preco={}; (produtos||[]).forEach(p=>{preco[p.id]=p.preco_compra||0;});
-    return Object.entries(contagens).reduce((s,[pid,qtd])=>s+(parseFloat(qtd)||0)*(preco[pid]||0),0);
+  // Valor (R$) de uma contagem física + diagnóstico de órfãos.
+  //  orfaos: produto_id na contagem mas inexistente em `produtos` (deletado) — entra como R$0.
+  valorInventarioDetalhado(contagens, produtos){
+    if(!contagens) return {valor:0, orfaos:[]};
+    const prodById={}; (produtos||[]).forEach(p=>{ if(p&&p.id) prodById[p.id]=p; });
+    const orfaos={};
+    let v=0;
+    Object.entries(contagens).forEach(([pid,qtd])=>{
+      const p=prodById[pid];
+      if(!p){ if(pid) orfaos[pid]={produto_id:pid}; return; }
+      v += (parseFloat(qtd)||0)*(p.preco_compra||0);
+    });
+    return {valor:v, orfaos:Object.values(orfaos)};
   },
+
+  // Delegate: mantém o retorno NUMÉRICO de antes.
+  valorInventario(contagens, produtos){ return Domain.valorInventarioDetalhado(contagens, produtos).valor; },
 
   // Mês anterior: "2026-05" → "2026-04"; "2026-01" → "2025-12". Não-"YYYY-MM" → "".
   mesAnterior(ym){
@@ -90,16 +101,28 @@ const Domain = {
     return (e.hasBase ? e.baseQty : (produto.estoque_inicial||0)) + e.comprasSince - (e.baixasSince||0);
   },
 
-  // Custo (CMV unitário) de uma ficha, somando ingredientes (R$/ml × ml).
-  calcCustoFicha(ficha, produtos){
-    if(!ficha || !ficha.ingredientes || !ficha.ingredientes.length) return 0;
+  // Custo (CMV unitário) de uma ficha + diagnóstico do que NÃO entrou no custo.
+  //  orfaos:      produto_id que não existe mais em `produtos` (deletado) — referência quebrada.
+  //  incompletos: produto existe mas sem preco_compra e/ou capacidade_ml — cadastro incompleto.
+  // Antes os 3 casos eram pulados em silêncio; aqui são reportados SEM mudar o custo somado.
+  calcCustoFichaDetalhado(ficha, produtos){
+    if(!ficha || !ficha.ingredientes || !ficha.ingredientes.length) return {custo:0, orfaos:[], incompletos:[]};
+    const orfaos={}, incompletos={};
     let c=0;
     ficha.ingredientes.forEach(i=>{
       const p=(produtos||[]).find(x=>x.id===i.produto_id);
-      if(p&&p.preco_compra&&p.capacidade_ml) c+=(i.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
+      if(!p){ if(i.produto_id) orfaos[i.produto_id]={produto_id:i.produto_id}; return; }
+      if(!p.preco_compra || !p.capacidade_ml){
+        incompletos[p.id]={produto_id:p.id, nome_produto:p.nome||"", semPreco:!p.preco_compra, semCapacidade:!p.capacidade_ml};
+        return;
+      }
+      c+=(i.quantidade_ml||0)*(p.preco_compra/p.capacidade_ml);
     });
-    return c;
+    return {custo:c, orfaos:Object.values(orfaos), incompletos:Object.values(incompletos)};
   },
+
+  // Delegate: mantém o retorno NUMÉRICO de antes (call sites que só querem o custo).
+  calcCustoFicha(ficha, produtos){ return Domain.calcCustoFichaDetalhado(ficha, produtos).custo; },
 
   // Soma dos custos fixos do mês selecionado (ou de todos, se mesSel vazio).
   totalFixo(custos, mesSel){
@@ -356,6 +379,7 @@ const Domain = {
       if((r.unidade||"un").toLowerCase()==="ml"){
         const p=prodById&&prodById[r.produto_id], cap=(p&&p.capacidade_ml)||0;
         if(cap>0){ out.push({produto_id:r.produto_id, unidades:(qtd*qb)/cap}); return; }
+        out.push({produto_id:r.produto_id, nome_produto:r.nome_produto||"", unidades:0, erro:"ml_sem_capacidade"}); return;
       }
       out.push({produto_id:r.produto_id, unidades: qtd*qb});
     });
@@ -379,13 +403,15 @@ const Domain = {
 
     const venda={}, cortesia={}, estornoDev={}, comprasPid={};
     const add=(o,pid,u)=>{ if(!pid) return; o[pid]=(o[pid]||0)+u; };
+    const mlSemCap={};
+    const addErro=b=>{ if(b&&b.erro==="ml_sem_capacidade"&&b.produto_id) mlSemCap[b.produto_id]={produto_id:b.produto_id, nome_produto:b.nome_produto||""}; };
 
     // 1) consumo de venda (Saída Geral) — combo-pai baixa só o mixer (anti-dupla-contagem)
     const skusNaoMapeados=[];
     saida.forEach(v=>{
       const m=mapBySku[v.sku];
       if(!m){ if(v.sku) skusNaoMapeados.push(v.sku); return; }
-      Domain.resolverBaixa(m, v.quantidade||0, prodById).forEach(b=>add(venda,b.produto_id,b.unidades));
+      Domain.resolverBaixa(m, v.quantidade||0, prodById).forEach(b=>{ if(b.erro){ addErro(b); return; } add(venda,b.produto_id,b.unidades); });
     });
 
     // 2) consumo de cortesia — qtd = round(valor_brl / preco_zig); casa por nome
@@ -397,7 +423,7 @@ const Domain = {
       if(preco<=0){ cortesiasSemPreco++; return; }
       const qtd=Math.round((c.valor_brl||0)/preco);
       if(qtd<=0) return;
-      Domain.resolverBaixa(m, qtd, prodById).forEach(b=>add(cortesia,b.produto_id,b.unidades));
+      Domain.resolverBaixa(m, qtd, prodById).forEach(b=>{ if(b.erro){ addErro(b); return; } add(cortesia,b.produto_id,b.unidades); });
     });
 
     // 3) estorno devolvido — só "Estornado" volta ao estoque; casa por nome
@@ -406,7 +432,7 @@ const Domain = {
       if(N(e.tipo)!=="estornado") return;
       const m=mapByNome[N(e.produto)];
       if(!m){ estornosSemMapa++; return; }
-      Domain.resolverBaixa(m, e.quantidade||0, prodById).forEach(b=>add(estornoDev,b.produto_id,b.unidades));
+      Domain.resolverBaixa(m, e.quantidade||0, prodById).forEach(b=>{ if(b.erro){ addErro(b); return; } add(estornoDev,b.produto_id,b.unidades); });
     });
 
     // 4) compras da semana (reusa a coleção `compras`), por data ISO no período
@@ -449,7 +475,8 @@ const Domain = {
       meta:{
         skus_nao_mapeados:[...new Set(skusNaoMapeados)],
         cortesias_sem_mapa:cortesiasSemMapa, cortesias_sem_preco:cortesiasSemPreco,
-        estornos_sem_mapa:estornosSemMapa
+        estornos_sem_mapa:estornosSemMapa,
+        ml_sem_capacidade:Object.values(mlSemCap)
       }
     };
   },
@@ -522,6 +549,8 @@ const Domain = {
 
     const baixas={}, detalhe=[], naoMapSku=[], naoMapNomeRaw=[];
     const add=(pid,u)=>{ if(!pid||!u) return; baixas[pid]=(baixas[pid]||0)+u; };
+    const mlSemCap={};
+    const addErro=b=>{ if(b&&b.erro==="ml_sem_capacidade"&&b.produto_id) mlSemCap[b.produto_id]={produto_id:b.produto_id, nome_produto:b.nome_produto||""}; };
     const nomeProd=pid=>(prodById[pid]&&prodById[pid].nome)||pid;
     let total_itens=0, total_valor=0;
 
@@ -533,6 +562,7 @@ const Domain = {
       const m=mapBySku[v.sku];
       if(!m){ naoMapSku.push({sku:v.sku, nome:v.nome, quantidade:v.quantidade||0}); return; }
       Domain.resolverBaixa(m, v.quantidade||0, prodById).forEach(b=>{
+        if(b.erro){ addErro(b); return; }
         add(b.produto_id, b.unidades);
         detalhe.push({origem:"venda", chave:v.sku, item:v.nome, qtd_zig:v.quantidade||0,
           produto_id:b.produto_id, produto:nomeProd(b.produto_id), unidades:b.unidades});
@@ -544,6 +574,7 @@ const Domain = {
       const m=mapByNome[N(it.item_montavel)];
       if(!m){ naoMapNomeRaw.push({nome:it.item_montavel, quantidade:it.quantidade||0}); return; }
       Domain.resolverBaixa(m, it.quantidade||0, prodById).forEach(b=>{
+        if(b.erro){ addErro(b); return; }
         add(b.produto_id, b.unidades);
         detalhe.push({origem:"montavel", chave:it.item_montavel, item:it.item_montavel, qtd_zig:it.quantidade||0,
           produto_id:b.produto_id, produto:nomeProd(b.produto_id), unidades:b.unidades});
@@ -556,7 +587,7 @@ const Domain = {
 
     return {
       baixas, detalhe,
-      naoMapeados:{ skus:naoMapSku, nomes:Object.values(aggNome) },
+      naoMapeados:{ skus:naoMapSku, nomes:Object.values(aggNome), semCapacidade:Object.values(mlSemCap) },
       total_itens, total_valor
     };
   },

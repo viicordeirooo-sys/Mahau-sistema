@@ -382,6 +382,7 @@ const S = {
   produtos:[],fichas:[],compras:[],eventos:[],
   custos:[],inventarios:[],inventarios_mensais:[],
   semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[],estornos_semana:[],conciliacoes:[], // módulo Conciliação
+  skus_zig:[], // catálogo global de SKUs do Zig (sku + nome_zig), persistente e independente de semana
   config:{datasNoMes:4, produtos_sem_ficha:undefined}, // undefined (não []) → Array.isArray falha → fallback dos 3 nomes; [] só vem do Firestore = escolha explícita
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null,  // null = todos os meses
@@ -2612,6 +2613,35 @@ function importVendasZigFile(input){
   reader.readAsArrayBuffer(file);
 }
 
+// Importa SKUs do Zig para o catálogo GLOBAL (skus_zig) a partir da mesma Saída Geral.
+// Só sku+nome (ignora quantidade), sem semana/vendas_zig/período. Reusa a leitura de
+// importVendasZigFile. Dedup por sku; grava apenas SKUs ainda ausentes em S.skus_zig.
+async function importSkusZigFile(input){
+  const file=input.files&&input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=async ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:"array"});
+      const N=Domain._norm, toM=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,blankrows:false});
+      let parsed=null;
+      for(const n of wb.SheetNames.filter(n=>N(n).includes("saida")).concat(wb.SheetNames)){ const p=Domain.parseSaidaGeral(toM(n)); if(!p.erro){ parsed=p; break; } }
+      if(!parsed){ toast("Não encontrei a aba de Saída Geral (SKU/Produto/Quantidade).","err","Importar SKUs"); return; }
+      // SKUs únicos: dedup por sku, mantém o nome da 1ª ocorrência; quantidade ignorada.
+      const unicos={};
+      (parsed.itens||[]).forEach(it=>{ if(it.sku && !(it.sku in unicos)) unicos[it.sku]=it.produto||""; });
+      const skus=Object.keys(unicos);
+      const existentes=new Set(S.skus_zig.map(s=>s.sku));
+      const novos=skus.filter(sku=>!existentes.has(sku));
+      let salvos=0;
+      for(const sku of novos){ const ok=await FS.save("skus_zig",{sku, nome_zig:unicos[sku]}); if(ok) salvos++; }
+      const jaExistiam=skus.length-novos.length;
+      toast(`${skus.length} SKU(s) no arquivo · ${salvos} novo(s) salvo(s) · ${jaExistiam} já no catálogo.`,"ok","SKUs do Zig importados");
+      rerenderMapa();
+    }catch(err){ toast(err.message||"Falha ao ler o arquivo.","err","Importar SKUs"); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 async function salvarVendasZig(){
   const sel=S.concilSemanaSel;
   if(!vendasZigImport || !sel){ toast("Selecione uma semana e importe um arquivo.","err"); return; }
@@ -2922,12 +2952,18 @@ function salvarMapa(){
 function concilMapaHTML(){
   const skusVistos={};
   S.vendas_zig.forEach(e=>(e.itens||[]).forEach(v=>{ if(v.sku && !(v.sku in skusVistos)) skusVistos[v.sku]=v.produto||""; }));
+  S.skus_zig.forEach(it=>{ if(it.sku && !(it.sku in skusVistos)) skusVistos[it.sku]=it.nome_zig||""; });
   const mapados=new Set(S.mapeamento_zig.map(m=>m.sku_zig));
   const naoMap=Object.entries(skusVistos).filter(([sku])=>!mapados.has(sku)).map(([sku,nome])=>({sku,nome}));
   const q=(concilMapaQ||"").toLowerCase().trim();
   const naoMapF=q?naoMap.filter(s=>s.sku.toLowerCase().includes(q)||(s.nome||"").toLowerCase().includes(q)):naoMap;
   const maps=S.mapeamento_zig.slice().sort((a,b)=>(a.nome_zig||a.sku_zig||"").localeCompare(b.nome_zig||b.sku_zig||""));
   return `
+    <div class="fb">
+      <div class="ft">Importar SKUs do Zig (.xlsx)</div>
+      <div style="font-size:11px;color:#484f58;margin-bottom:10px">Lê a <strong>Saída Geral de produtos</strong> da Zig e cadastra os SKUs únicos (SKU + nome) no catálogo global — <strong>não</strong> cria semana nem grava venda; ignora a quantidade. Reimportar só acrescenta SKUs novos.</div>
+      <input type="file" id="skuszig-file" accept=".xlsx,.xls" onchange="importSkusZigFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
+    </div>
     ${mapaFormHTML()}
     ${naoMap.length?`<div class="box">
       <div class="bh"><span class="bt" style="color:#f59e0b">⚠ ${naoMap.length} SKU(s) não mapeado(s)${q?` · ${naoMapF.length} no filtro`:""}</span></div>
@@ -2939,7 +2975,7 @@ function concilMapaHTML(){
         <td class="mn">${esc(s.sku)}</td><td class="w6">${esc(s.nome)}</td>
         <td class="r"><button class="btn bp bsm" data-sku="${esc(s.sku)}" data-n="${esc(s.nome)}" onclick="novoMapa(this.dataset.sku,this.dataset.n)">Mapear</button></td>
       </tr>`).join(""):`<tr><td colspan="3" class="empty">Nenhum SKU corresponde a "${q.replace(/"/g,"&quot;")}".</td></tr>`}</tbody></table></div>
-    </div>`:(S.vendas_zig.length?`<div class="ok-strip">Todos os SKUs da Saída importada estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Importe a Saída Geral (aba 📊) para detectar SKUs a mapear.</div>`)}
+    </div>`:((S.vendas_zig.length||S.skus_zig.length)?`<div class="ok-strip">Todos os SKUs importados estão mapeados ✓</div>`:`<div class="alert-strip" style="background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.3);color:#3b82f6">Use o botão <strong>Importar SKUs do Zig</strong> acima (ou importe a Saída Geral na aba 📊) para detectar SKUs a mapear.</div>`)}
     <div class="box">
       <div class="bh"><span class="bt">${maps.length} mapeamento(s)</span><button class="btn bp bsm" onclick="novoMapa('','')">+ Novo</button></div>
       <div class="tw"><table>
@@ -3145,7 +3181,7 @@ function bindData(){
   if(_unsubs.length || !db) return;
   // Filtra soft-deletados ao entrar (ficam só na Lixeira via S._trash); invalida o
   // índice de estoque para as coleções que o alimentam.
-  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana","conciliacoes"];
+  const COLS=["produtos","fichas","compras","eventos","custos","inventarios","inventarios_mensais","semanas_conciliacao","estoques","vendas_zig","mapeamento_zig","cortesias_semana","estornos_semana","conciliacoes","skus_zig"];
   const STOCK=new Set(["produtos","compras","inventarios","inventarios_mensais","eventos"]);
   COLS.forEach(col=>{
     _unsubs.push(FS.listen(col, d=>{

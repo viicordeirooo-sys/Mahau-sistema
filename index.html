@@ -381,7 +381,7 @@ const S = {
   produtos:[],fichas:[],compras:[],eventos:[],
   custos:[],inventarios:[],inventarios_mensais:[],
   semanas_conciliacao:[],estoques:[],vendas_zig:[],mapeamento_zig:[],cortesias_semana:[],estornos_semana:[],conciliacoes:[], // módulo Conciliação
-  config:{datasNoMes:4},
+  config:{datasNoMes:4, produtos_sem_ficha:undefined}, // undefined (não []) → Array.isArray falha → fallback dos 3 nomes; [] só vem do Firestore = escolha explícita
   _trash:{}, // docs soft-deletados, por coleção (preenchido nos listeners)
   mesSel:null,  // null = todos os meses
   concilTab:"semanas", concilSemanaSel:null  // estado da página Conciliação
@@ -673,6 +673,37 @@ function renderProd(){
     </div>
   </div>`:"";
 
+  // Seção "Produtos sem ficha" — listaEfetiva: config (mesmo []) senão fallback dos 3 nomes.
+  const sfLista = listaSemFichaEfetiva();
+  const sfConfigurado = Array.isArray(S.config.produtos_sem_ficha);
+  const sfNorms = sfLista.map(x=>Domain._norm(x));
+  const sfOpcoes = S.produtos
+    .filter(p=>p.nome && !sfNorms.includes(Domain._norm(p.nome)))
+    .sort((a,b)=>a.nome.localeCompare(b.nome))
+    .map(p=>`<option value="${esc(p.nome)}">${esc(p.nome)}</option>`).join("");
+  const sfSelo = sfConfigurado
+    ? chip("✏️ Personalizada","#22c55e")
+    : chip("📋 Lista padrão — ainda não personalizada","#8b949e");
+  const sfItens = sfLista.length
+    ? sfLista.map((nome,i)=>`<tr><td class="w6">${esc(nome)}</td><td class="r"><button class="bi" onclick="removeSemFicha(${i})">✕</button></td></tr>`).join("")
+    : `<tr><td colspan="2" class="empty">Nenhum produto fora do cálculo — todos entram como OK/FALTA/SOBRA.</td></tr>`;
+  const semFichaHTML = `<div class="box" style="margin-top:16px">
+      <div class="bh"><span class="bt">🚫 Produtos sem ficha técnica</span>${sfSelo}</div>
+      <div style="font-size:11px;color:#484f58;padding:9px 13px 0">Ficam fora do cálculo de desvio na Conciliação (não viram FALTA/SOBRA).</div>
+      <div style="padding:11px 13px">
+        <div class="fi"><label>Adicionar produto sem ficha</label>
+          <select onchange="addSemFicha(this.value)">
+            <option value="">+ Adicionar produto sem ficha...</option>
+            ${sfOpcoes}
+          </select>
+        </div>
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th></th></tr></thead>
+        <tbody>${sfItens}</tbody>
+      </table></div>
+    </div>`;
+
   set("p-prod",`
     <div class="pg-h">
       <div><div class="eyebrow">CADASTRO CENTRAL</div><div class="pg-t">Produtos</div></div>
@@ -714,6 +745,7 @@ function renderProd(){
         </tbody>
       </table></div>
     </div>
+    ${semFichaHTML}
   `);
 }
 
@@ -729,6 +761,27 @@ function saveProd(){
     [d.capacidade_ml>=0&&d.preco_compra>=0&&d.preco_venda>=0&&d.estoque_min>=0&&d.estoque_inicial>=0, "Valores não podem ser negativos."],
   ])) return;
   FS.save("produtos",d); prodForm=null;
+}
+
+// ── PRODUTOS SEM FICHA TÉCNICA (config/settings.produtos_sem_ficha) ───────────
+// listaEfetiva: usa a config (inclusive []) senão o fallback dos 3 nomes (Domain.PRODUTOS_SEM_FICHA).
+function listaSemFichaEfetiva(){
+  return Array.isArray(S.config.produtos_sem_ficha) ? S.config.produtos_sem_ficha : Domain.PRODUTOS_SEM_FICHA;
+}
+function salvarSemFicha(novaLista){
+  S.config = {...S.config, produtos_sem_ficha:novaLista}; // update otimista ANTES do render → tela reflete na hora
+  render();
+  if(db) db.collection('config').doc('settings').set({...S.config, produtos_sem_ficha:novaLista},{merge:true});
+}
+function addSemFicha(nome){
+  if(!nome) return;
+  const atual=listaSemFichaEfetiva();
+  if(atual.some(x=>Domain._norm(x)===Domain._norm(nome))) return; // já está — não duplica
+  salvarSemFicha([...atual, nome]); // 1ª edição materializa o fallback no Firestore
+}
+function removeSemFicha(i){
+  const atual=listaSemFichaEfetiva();
+  salvarSemFicha(atual.filter((_,idx)=>idx!==i)); // por índice — sem interpolar nome no onclick
 }
 
 
@@ -3006,6 +3059,7 @@ async function gerarConciliacao(){
     estoqueAntes:eAntes.produtos||[], estoqueDepois:eDepois.produtos||[],
     saidaGeral:saida.itens||[], cortesias:(cort&&cort.itens)||[], estornos:(est&&est.itens)||[],
     compras:S.compras, mapeamentos:S.mapeamento_zig, produtos:S.produtos,
+    produtosSemFicha:S.config.produtos_sem_ficha,
     opts:{periodo_inicio:s.periodo_inicio, periodo_fim:s.periodo_fim}
   });
   const existente=S.conciliacoes.find(c=>c.semana_id===sel);

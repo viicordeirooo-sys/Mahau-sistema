@@ -348,9 +348,10 @@ const Domain = {
   // ── MOTOR DE CONCILIAÇÃO (Sprint 2 · 2d) ──────────────────────────────────────
   // Produtos sem ficha técnica definida → não entram no cálculo de desvio (status SEM FICHA).
   PRODUTOS_SEM_FICHA: ["Gin Mahau","Kawai - vodka","Gelo De Coco"],
-  semFicha(nome){
+  semFicha(nome, lista){
+    const arr = Array.isArray(lista) ? lista : Domain.PRODUTOS_SEM_FICHA;
     const n=Domain._norm(nome);
-    return Domain.PRODUTOS_SEM_FICHA.some(x=>Domain._norm(x)===n);
+    return arr.some(x=>Domain._norm(x)===n);
   },
 
   // Traduz "produto Zig + quantidade" em baixas de estoque: [{produto_id, unidades}].
@@ -396,6 +397,8 @@ const Domain = {
     const saida=p.saidaGeral||[], cortesias=p.cortesias||[], estornos=p.estornos||[];
     const compras=p.compras||[], mapeamentos=p.mapeamentos||[], produtos=p.produtos||[];
     const opts=p.opts||{}, ini=opts.periodo_inicio||"", fim=opts.periodo_fim||"";
+    // Lista de produtos sem ficha técnica: usa a config (inclusive [] explícito), senão o fallback dos 3 nomes.
+    const semFichaLista = Array.isArray(p.produtosSemFicha) ? p.produtosSemFicha : Domain.PRODUTOS_SEM_FICHA;
 
     const prodById={}; produtos.forEach(x=>{ if(x&&x.id) prodById[x.id]=x; });
     const mapBySku={}, mapByNome={};
@@ -461,7 +464,7 @@ const Domain = {
       const preco=pr.preco_compra||custoBy[pid]||0;
       const valor_rs=Math.abs(desvio)*preco;
       let status;
-      if(Domain.semFicha(nome)){ status="sem_ficha"; cSem++; }
+      if(Domain.semFicha(nome, semFichaLista)){ status="sem_ficha"; cSem++; }
       else if(Math.abs(desvio)<0.5){ status="ok"; cOk++; }
       else if(desvio<0){ status="falta"; cFalta++; total_falta+=valor_rs; }
       else { status="sobra"; cSobra++; total_sobra+=valor_rs; }

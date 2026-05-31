@@ -194,6 +194,7 @@ tr:hover td{background:#1a2030}.tr-tot td{background:#1c2332;font-weight:700}
   <div id="month-bar"></div>
   <div id="p-dash"    class="page on"></div>
   <div id="p-prod"    class="page"></div>
+  <div id="p-mapa"    class="page"></div>
   <div id="p-fichas"  class="page"></div>
   <div id="p-estoque" class="page"></div>
   <div id="p-compras" class="page"></div>
@@ -502,6 +503,7 @@ const totalComprasMes=()=>S.compras.filter(c=>noMes(c.mes||c.data)).reduce((s,c)
 const PAGES=[
   {id:"dash",    label:"Dashboard"},
   {id:"prod",    label:"Produtos"},
+  {id:"mapa",    label:"🔗 Mapeamento Zig"},
   {id:"fichas",  label:"Fichas Técnicas"},
   {id:"estoque", label:"Estoque"},
   {id:"compras", label:"Compras"},
@@ -548,6 +550,7 @@ function render(){
   const p=S.page;
   if(p==="dash")    renderDash();
   if(p==="prod")    renderProd();
+  if(p==="mapa")    renderMapa();
   if(p==="fichas")  renderFichas();
   if(p==="estoque") renderEstoque();
   if(p==="compras") renderCompras();
@@ -2821,7 +2824,7 @@ function mapaFormHTML(){
   const prods=S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome));
   const optProd=sel=>`<option value="">-- selecione --</option>`+prods.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${p.nome}</option>`).join("");
   return `<div class="fb">
-    <div class="ft">${f.id?"Editar":"Novo"} Mapeamento<button class="bi" onclick="mapaForm=null;renderConciliacao()">✕</button></div>
+    <div class="ft">${f.id?"Editar":"Novo"} Mapeamento<button class="bi" onclick="mapaForm=null;rerenderMapa()">✕</button></div>
     <div class="fg g3">
       <div class="fi"><label>SKU Zig</label><input id="mp-sku" value="${(f.sku_zig||"").replace(/"/g,"&quot;")}"></div>
       <div class="fi"><label>Nome na Zig</label><input id="mp-nome" value="${(f.nome_zig||"").replace(/"/g,"&quot;")}"></div>
@@ -2849,7 +2852,7 @@ function mapaFormHTML(){
       <div class="fi"><label>Garrafas por combo <span style="color:#484f58">(informativo)</span></label><input id="mp-garrafa" type="number" step="any" value="${f.garrafa_qtd||""}"></div>
     </div><div style="font-size:10px;color:#484f58;margin-bottom:8px">A garrafa é baixada pela linha montável da Saída Geral (evita dupla contagem). O combo baixa só o mixer × quantidade.</div>`:""}
     ${f.tipo==="ignorar"?`<div style="font-size:11px;color:#484f58;margin-bottom:8px">Este SKU será ignorado na conciliação (não baixa estoque).</div>`:""}
-    <div style="display:flex;gap:8px"><button class="btn bp" onclick="salvarMapa()">Salvar</button><button class="btn bg_" onclick="mapaForm=null;renderConciliacao()">Cancelar</button></div>
+    <div style="display:flex;gap:8px"><button class="btn bp" onclick="salvarMapa()">Salvar</button><button class="btn bg_" onclick="mapaForm=null;rerenderMapa()">Cancelar</button></div>
   </div>`;
 }
 
@@ -2873,10 +2876,10 @@ function mapaCap(){
     if(el("mp-garrafa")) f.garrafa_qtd=nv("mp-garrafa");
   }
 }
-function mapaAddRegra(){ if(!mapaForm) return; mapaCap(); (mapaForm.regras_form=mapaForm.regras_form||[]).push(novaRegraForm()); renderConciliacao(); }
-function mapaDelRegra(i){ if(!mapaForm) return; mapaCap(); const a=mapaForm.regras_form||[]; if(a.length<=1) return; a.splice(i,1); renderConciliacao(); }
+function mapaAddRegra(){ if(!mapaForm) return; mapaCap(); (mapaForm.regras_form=mapaForm.regras_form||[]).push(novaRegraForm()); rerenderMapa(); }
+function mapaDelRegra(i){ if(!mapaForm) return; mapaCap(); const a=mapaForm.regras_form||[]; if(a.length<=1) return; a.splice(i,1); rerenderMapa(); }
 
-function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regras_form:[novaRegraForm()]}; S.concilTab="mapa"; renderConciliacao(); }
+function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regras_form:[novaRegraForm()]}; S.concilTab="mapa"; rerenderMapa(); }
 function editarMapa(id){
   const m=S.mapeamento_zig.find(x=>x.id===id); if(!m) return;
   const rf=(m.regras||[]).filter(r=>r&&r.produto_id)
@@ -2885,7 +2888,7 @@ function editarMapa(id){
     regras_form: rf.length?rf:[novaRegraForm()],
     garrafa_qtd:m.garrafa_qtd,redbull_qtd:m.redbull_qtd,
     preco_zig:m.preco_zig,mixer_produto_id:m.mixer_produto_id};
-  renderConciliacao();
+  rerenderMapa();
 }
 function salvarMapa(){
   const f=mapaForm; if(!f) return;
@@ -2915,7 +2918,7 @@ function salvarMapa(){
     doc.mixer_produto_id=mid||""; doc.mixer_nome=mp?mp.nome:"";
   }
   FS.save("mapeamento_zig",doc);
-  mapaForm=null; renderConciliacao();
+  mapaForm=null; rerenderMapa();
 }
 
 function concilMapaHTML(){
@@ -2931,7 +2934,7 @@ function concilMapaHTML(){
     ${naoMap.length?`<div class="box">
       <div class="bh"><span class="bt" style="color:#f59e0b">⚠ ${naoMap.length} SKU(s) não mapeado(s)${q?` · ${naoMapF.length} no filtro`:""}</span></div>
       <div class="bb" style="padding-bottom:0">
-        <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar SKU ou nome..." value="${concilMapaQ.replace(/"/g,"&quot;")}" oninput="concilMapaQ=this.value;renderConciliacao()"></div>
+        <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar SKU ou nome..." value="${concilMapaQ.replace(/"/g,"&quot;")}" oninput="concilMapaQ=this.value;rerenderMapa()"></div>
       </div>
       <div class="tw"><table><thead><tr><th>SKU</th><th>Nome (Zig)</th><th class="r">Ação</th></tr></thead>
       <tbody>${naoMapF.length?naoMapF.map(s=>`<tr style="background:rgba(245,158,11,.05)">
@@ -2953,6 +2956,20 @@ function concilMapaHTML(){
       </table></div>
     </div>`;
 }
+
+// ── Página de cadastro central: Mapeamento Zig → Estoque ──────────────────────
+// Reusa concilMapaHTML()/mapaFormHTML() (mesma tela da aba 🔗 da Conciliação).
+// Enquanto a aba antiga ainda existe, a tela vive nos dois lugares (sub-3 remove a antiga).
+function renderMapa(){
+  set("p-mapa",`
+    <div class="pg-h">
+      <div><div class="eyebrow">CADASTRO CENTRAL</div><div class="pg-t">Mapeamento Zig → Estoque</div></div>
+    </div>
+    ${concilMapaHTML()}
+  `);
+}
+// Re-render correto conforme onde a tela está sendo exibida: página nova vs. aba da Conciliação.
+function rerenderMapa(){ if(S.page==="mapa") renderMapa(); else renderConciliacao(); }
 
 // ── Conciliação · aba Resultado (2e) ──────────────────────────────────────────
 // Roda Domain.conciliar com as fontes da semana ativa e salva em `conciliacoes`

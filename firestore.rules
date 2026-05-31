@@ -28,6 +28,7 @@ rules_version = '2';
 //   ├──────────────────────┼───────┼─────────┼───────┤
 //   │ produtos             │ RWD   │ RW      │ R     │
 //   │ mapeamento_zig       │ RWD   │ RW      │ R     │
+//   │ skus_zig             │ RWD   │ RW      │ R     │
 //   │ semanas_conciliacao  │ RWD   │ RW      │ R     │
 //   │ estoques             │ RWD   │ RW      │ RW    │
 //   │ vendas_zig           │ RWD   │ RW      │ RW    │
@@ -110,6 +111,11 @@ service cloud.firestore {
       allow delete:         if isAdmin();
     }
     match /mapeamento_zig/{doc} {
+      allow read:           if isAdmin() || isManager() || isStaff();
+      allow create, update: if isAdmin() || isManager();
+      allow delete:         if isAdmin();
+    }
+    match /skus_zig/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
       allow create, update: if isAdmin() || isManager();
       allow delete:         if isAdmin();

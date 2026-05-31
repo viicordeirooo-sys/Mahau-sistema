@@ -1607,7 +1607,7 @@ function importProdVendidosFile(input){
   reader.readAsArrayBuffer(file);
 }
 
-// Atalho para mapear um item não-mapeado do preview (vai para Conciliação → Mapeamento).
+// Atalho para mapear um item não-mapeado do preview (vai para a página Mapeamento Zig).
 // Usa índice (não a string) para evitar problemas de escape com aspas no nome.
 function mapearNaoMapeado(tipo,i){
   const imp=prodVendidosImport; if(!imp) return;
@@ -1617,7 +1617,7 @@ function mapearNaoMapeado(tipo,i){
 }
 function mapearDoEvento(sku,nome){
   mapaForm={id:null, sku_zig:sku||"", nome_zig:nome||"", tipo:"direto", regras_form:[novaRegraForm()]};
-  S.concilTab="mapa"; go("concil");
+  go("mapa");
 }
 
 function saveEv(){

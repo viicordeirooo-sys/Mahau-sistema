@@ -2352,7 +2352,6 @@ const CONCIL_TABS=[
   {id:"vendas",  label:"📊 Saída Zig"},
   {id:"cortesias", label:"🎁 Cortesias"},
   {id:"estornos", label:"↩️ Estornos"},
-  {id:"mapa",    label:"🔗 Mapeamento"},
   {id:"resultado", label:"⚖️ Resultado"},
 ];
 let estoqueImport=null; // preview do import de estoque (itens casados), antes de salvar
@@ -2369,13 +2368,12 @@ function renderConciliacao(){
   const pills=`<div class="pills" style="margin-bottom:12px">
     ${CONCIL_TABS.map(t=>`<button class="pill${tab===t.id?" on":""}" onclick="S.concilTab='${t.id}';renderConciliacao()">${t.label}</button>`).join("")}
   </div>`;
-  const corpo = tab==="semanas" ? concilSemanasHTML()
-    : tab==="estoque" ? concilEstoqueHTML()
+  const corpo = tab==="estoque" ? concilEstoqueHTML()
     : tab==="vendas" ? concilVendasHTML()
     : tab==="cortesias" ? concilCortesiasHTML()
     : tab==="estornos" ? concilEstornosHTML()
     : tab==="resultado" ? concilResultadoHTML()
-    : concilMapaHTML();
+    : concilSemanasHTML();
   set("p-concil",`
     <div class="pg-h"><div><div class="eyebrow">CONCILIAÇÃO DE ESTOQUE</div><div class="pg-t">Conciliação Semanal</div></div></div>
     ${pills}
@@ -2879,7 +2877,7 @@ function mapaCap(){
 function mapaAddRegra(){ if(!mapaForm) return; mapaCap(); (mapaForm.regras_form=mapaForm.regras_form||[]).push(novaRegraForm()); rerenderMapa(); }
 function mapaDelRegra(i){ if(!mapaForm) return; mapaCap(); const a=mapaForm.regras_form||[]; if(a.length<=1) return; a.splice(i,1); rerenderMapa(); }
 
-function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regras_form:[novaRegraForm()]}; S.concilTab="mapa"; rerenderMapa(); }
+function novoMapa(sku,nome){ mapaForm={id:null,sku_zig:sku||"",nome_zig:nome||"",tipo:"direto",regras_form:[novaRegraForm()]}; rerenderMapa(); }
 function editarMapa(id){
   const m=S.mapeamento_zig.find(x=>x.id===id); if(!m) return;
   const rf=(m.regras||[]).filter(r=>r&&r.produto_id)

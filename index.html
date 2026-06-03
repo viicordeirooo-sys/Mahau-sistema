@@ -443,6 +443,24 @@ function noMes(dateStr){ return Domain.noMes(dateStr, S.mesSel); }
 function fmtData(d){ return Domain.fmtData(d); }       // ISO → dd/mm/aaaa (legado passa direto)
 function mesDeData(d){ return Domain.mesDeData(d); }   // → "YYYY-MM" (ou "" se não-ISO)
 
+// Rótulo/sufixo do campo capacidade_ml conforme a unidade do produto (só exibição — o campo no
+// banco continua sendo capacidade_ml, número; resolverBaixa/CMV leem igual). Fallback seguro = ml.
+function capLabel(unidade){
+  switch((unidade||"").toLowerCase()){
+    case "kg":    return "Peso (kg)";
+    case "un":    return "Conteúdo (un)";
+    case "caixa": return "Unidades por caixa";
+    default:      return "Capacidade (ml)"; // garrafa, lata, litro, ml, ausente/outras
+  }
+}
+function capSuffix(unidade){
+  switch((unidade||"").toLowerCase()){
+    case "kg":           return "kg";
+    case "un": case "caixa": return "un";
+    default:             return "ml";
+  }
+}
+
 function renderMonthBar(){
   const meses=mesesDisponiveis();
   const hoje=new Date();
@@ -670,12 +688,12 @@ function renderProd(){
       <div class="fi"><label>Categoria</label><select id="pf-cat">
         ${CATS_PROD.slice(1).map(c=>`<option${prodForm.categoria===c?" selected":""}>${c}</option>`).join("")}
       </select></div>
-      <div class="fi"><label>Unidade</label><select id="pf-un">
+      <div class="fi"><label>Unidade</label><select id="pf-un" onchange="document.getElementById('pf-cap-label').textContent=capLabel(this.value)">
         ${["garrafa","lata","caixa","litro","kg","un"].map(u=>`<option${prodForm.unidade===u?" selected":""}>${u}</option>`).join("")}
       </select></div>
     </div>
     <div class="fg g4">
-      <div class="fi"><label>Capacidade (ml)</label><input id="pf-cap" type="number" value="${prodForm.capacidade_ml||""}"></div>
+      <div class="fi"><label id="pf-cap-label">${capLabel(prodForm.unidade)}</label><input id="pf-cap" type="number" value="${prodForm.capacidade_ml||""}"></div>
       <div class="fi"><label>Custo Unitário (R$)</label><input id="pf-custo" type="number" value="${prodForm.preco_compra||""}"></div>
       <div class="fi"><label>Preço Venda (R$)</label><input id="pf-venda" type="number" value="${prodForm.preco_venda||""}"></div>
       <div class="fi"><label>Estoque Mínimo (un)</label><input id="pf-min" type="number" value="${prodForm.estoque_min||""}"></div>
@@ -759,7 +777,7 @@ function paintProdList(){
           return`<tr>
             <td class="w6">${esc(p.nome)}</td>
             <td class="mt">${esc(p.categoria)}</td>
-            <td class="r mn mt">${p.capacidade_ml||"—"}ml</td>
+            <td class="r mn mt">${p.capacidade_ml||"—"}${p.capacidade_ml?capSuffix(p.unidade):""}</td>
             <td class="r mn">${p.preco_compra?Rf(p.preco_compra):"—"}</td>
             <td class="r mn">${p.preco_venda?Rf(p.preco_venda):"—"}</td>
             <td class="r">${mg!==null?chip(P(mg),mg>0.5?"#22c55e":mg>0.3?"#f59e0b":"#ef4444"):"—"}</td>

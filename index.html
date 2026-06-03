@@ -645,11 +645,6 @@ const CATS_PROD=["Todos","Destilados","Licores","Cervejas","Energéticos","Soft 
 
 function renderProd(){
   if(bulkMode){renderBulkEdit();return;}
-  let rows=S.produtos.filter(p=>{
-    if(prodCat!=="Todos"&&p.categoria!==prodCat) return false;
-    if(prodQ&&!p.nome.toLowerCase().includes(prodQ.toLowerCase())) return false;
-    return true;
-  }).sort((a,b)=>a.nome.localeCompare(b.nome));
 
   const formHTML=prodForm!==null?`<div class="fb">
     <div class="ft">${prodForm.id?"Editar":"Novo"} Produto<button class="bi" onclick="prodForm=null;renderProd()">✕</button></div>
@@ -718,11 +713,24 @@ function renderProd(){
     </div>
     ${formHTML}
     <div class="flt">
-      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar produto..." value="${prodQ}" oninput="prodQ=this.value;renderProd()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="q-prod" class="si-inp" placeholder="Buscar produto..." value="${esc(prodQ)}" oninput="prodQ=this.value;paintProdList()"></div>
     </div>
     <div class="pills">
       ${CATS_PROD.map(c=>`<button class="pill${prodCat===c?" on":""}" onclick="prodCat='${c}';renderProd()">${c}</button>`).join("")}
     </div>
+      <div id="p-prod-list"></div>
+    ${semFichaHTML}
+  `);
+  paintProdList();
+}
+
+function paintProdList(){
+  let rows=S.produtos.filter(p=>{
+    if(prodCat!=="Todos"&&p.categoria!==prodCat) return false;
+    if(prodQ&&!p.nome.toLowerCase().includes(prodQ.toLowerCase())) return false;
+    return true;
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+  set("p-prod-list",`
     <div class="box">
       <div class="bh"><span class="bt">${rows.length} produto${rows.length!==1?"s":""}</span></div>
       <div class="tw"><table>
@@ -748,9 +756,7 @@ function renderProd(){
         }).join(""):"<tr><td colspan='9' class='empty'>Nenhum produto cadastrado.</td></tr>"}
         </tbody>
       </table></div>
-    </div>
-    ${semFichaHTML}
-  `);
+    </div>`);
 }
 
 function saveProd(){
@@ -813,11 +819,28 @@ function renderBulkEdit(){
       ℹ Preencha <strong>Custo</strong>, <strong>Venda</strong>, <strong>Cap. ml</strong> e <strong>Mínimo</strong>. A <strong>Margem</strong> é calculada ao vivo. Campos em amarelo têm alteração pendente. Clique em "Salvar Tudo" quando terminar.
     </div>
     <div class="flt">
-      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar produto..." value="${prodQ}" oninput="prodQ=this.value;renderBulkEdit()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="q-bulk" class="si-inp" placeholder="Buscar produto..." value="${esc(prodQ)}" oninput="prodQ=this.value;paintBulkList()"></div>
     </div>
     <div class="pills">
       ${CATS_PROD.map(c=>`<button class="pill${prodCat===c?" on":""}" onclick="prodCat='${c}';renderBulkEdit()">${c}</button>`).join("")}
     </div>
+      <div id="p-bulk-list"></div>
+    <div class="bulk-save-bar">
+      <button class="btn bp" onclick="saveBulkAll()">💾 Salvar ${cnt>0?cnt+" alterações":"Tudo"}</button>
+      <span style="font-size:11px;color:#484f58">${cnt>0?cnt+" produto(s) com alterações pendentes":"Faça alterações acima e clique em Salvar"}</span>
+    </div>
+  `);
+  paintBulkList();
+}
+
+function paintBulkList(){
+  let rows=S.produtos.filter(p=>{
+    if(prodCat!=="Todos"&&p.categoria!==prodCat) return false;
+    if(prodQ&&!p.nome.toLowerCase().includes(prodQ.toLowerCase())) return false;
+    return true;
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+  const cnt=Object.keys(bulkChanges).length;
+  set("p-bulk-list",`
     <div class="box">
       <div class="bh"><span class="bt">${rows.length} produtos</span><span class="bt" style="color:#f59e0b">${cnt>0?cnt+" pendentes":""}</span></div>
       <div class="tw"><table>
@@ -864,12 +887,7 @@ function renderBulkEdit(){
         }).join("")}
         </tbody>
       </table></div>
-    </div>
-    <div class="bulk-save-bar">
-      <button class="btn bp" onclick="saveBulkAll()">💾 Salvar ${cnt>0?cnt+" alterações":"Tudo"}</button>
-      <span style="font-size:11px;color:#484f58">${cnt>0?cnt+" produto(s) com alterações pendentes":"Faça alterações acima e clique em Salvar"}</span>
-    </div>
-  `);
+    </div>`);
 }
 
 function setBulk(pid,field,val){
@@ -951,9 +969,19 @@ function renderFichas(){
     </div>
     ${formHTML}
     <div class="flt">
-      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar drink..." value="${fichaQ}" oninput="fichaQ=this.value;renderFichas()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="q-ficha" class="si-inp" placeholder="Buscar drink..." value="${esc(fichaQ)}" oninput="fichaQ=this.value;paintFichasList()"></div>
     </div>
     ${avisosFichas}
+    <div id="p-fichas-list"></div>
+  `);
+  paintFichasList();
+}
+
+function paintFichasList(){
+  let rows=S.fichas.filter(f=>!fichaQ||f.nome.toLowerCase().includes(fichaQ.toLowerCase()))
+    .sort((a,b)=>a.nome.localeCompare(b.nome));
+  const calc=rows.map(f=>({f, det:Domain.calcCustoFichaDetalhado(f, S.produtos)}));
+  set("p-fichas-list",`
     <div class="box">
       <div class="bh"><span class="bt">${rows.length} fichas cadastradas</span></div>
       <div class="tw"><table>
@@ -980,8 +1008,7 @@ function renderFichas(){
         }).join(""):"<tr><td colspan='7' class='empty'>Nenhuma ficha cadastrada.</td></tr>"}
         </tbody>
       </table></div>
-    </div>
-  `);
+    </div>`);
 }
 
 function renderFichaForm(){
@@ -1064,12 +1091,31 @@ function renderEstoque(){
       ${kpi("Alertas",alrs.length>0?alrs.length+"":"✓",alrs.length>0?"abaixo do mínimo":"Tudo em ordem",alrs.length>0?"#ef4444":"#22c55e",alrs.length>0?"#ef4444":"#22c55e")}
     </div>
     <div class="flt">
-      <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar..." value="${estQ}" oninput="estQ=this.value;renderEstoque()"></div>
+      <div class="sw"><span class="si">🔍</span><input id="q-est" class="si-inp" placeholder="Buscar..." value="${esc(estQ)}" oninput="estQ=this.value;paintEstList()"></div>
     </div>
     <div class="pills">
       ${CATS_PROD.map(c=>`<button class="pill${estCat===c?" on":""}" onclick="estCat='${c}';renderEstoque()">${c}</button>`).join("")}
     </div>
     ${alrs.length?`<div class="alert-strip">⚠ ${alrs.length} produto${alrs.length>1?"s abaixo":" abaixo"} do mínimo</div>`:""}
+    <div id="p-est-list"></div>
+  `);
+  paintEstList();
+  if(showCatalogoImport) renderCatalogoImport();
+  if(showListaCompras) renderListaCompras();
+}
+
+function paintEstList(){
+  let rows=S.produtos.filter(p=>{
+    if(estCat!=="Todos"&&p.categoria!==estCat) return false;
+    if(estQ&&!p.nome.toLowerCase().includes(estQ.toLowerCase())) return false;
+    return true;
+  }).map(p=>({...p,atual:estoqueAtual(p.id)}))
+    .sort((a,b)=>{
+      const aa=a.atual<=(a.estoque_min||0)?0:1;
+      const bb=b.atual<=(b.estoque_min||0)?0:1;
+      return aa-bb||a.nome.localeCompare(b.nome);
+    });
+  set("p-est-list",`
     <div class="box">
       <div class="bh"><span class="bt">${rows.length} produtos</span></div>
       <div class="tw"><table>
@@ -1088,10 +1134,7 @@ function renderEstoque(){
         }).join("")}
         </tbody>
       </table></div>
-    </div>
-  `);
-  if(showCatalogoImport) renderCatalogoImport();
-  if(showListaCompras) renderListaCompras();
+    </div>`);
 }
 
 // ── IMPORT DE CATÁLOGO (página Estoque) ───────────────────────────────────────
@@ -2968,7 +3011,7 @@ function concilMapaHTML(){
     ${naoMap.length?`<div class="box">
       <div class="bh"><span class="bt" style="color:#f59e0b">⚠ ${naoMap.length} SKU(s) não mapeado(s)${q?` · ${naoMapF.length} no filtro`:""}</span></div>
       <div class="bb" style="padding-bottom:0">
-        <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar SKU ou nome..." value="${concilMapaQ.replace(/"/g,"&quot;")}" oninput="concilMapaQ=this.value;rerenderMapa()"></div>
+        <div class="sw"><span class="si">🔍</span><input class="si-inp" placeholder="Buscar SKU ou nome..." value="${esc(concilMapaQ)}" oninput="concilMapaQ=this.value;rerenderMapa()"></div>
       </div>
       <div class="tw"><table><thead><tr><th>SKU</th><th>Nome (Zig)</th><th class="r">Ação</th></tr></thead>
       <tbody>${naoMapF.length?naoMapF.map(s=>`<tr style="background:rgba(245,158,11,.05)">

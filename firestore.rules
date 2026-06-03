@@ -55,51 +55,128 @@ service cloud.firestore {
     function isManager() { return role() == "manager"; }
     function isStaff()   { return role() == "staff"; }
 
+    // ── Validação de schema (Nível B tolerante: campos opcionais, validados quando presentes; sem hasOnly) ──
+    function numOk(d, k, teto) {
+      return !(k in d) || (d[k] is number && d[k] >= 0 && d[k] <= teto);
+    }
+    function strOk(d, k, maxlen) {
+      return !(k in d) || (d[k] is string && d[k].size() <= maxlen);
+    }
+    function tsOk(d, k) {
+      return !(k in d) || d[k] is timestamp || d[k] is string;
+    }
+    function produtoOk(d) {
+      return d is map
+        && strOk(d, 'nome', 200)
+        && strOk(d, 'categoria', 60)
+        && strOk(d, 'unidade', 20)
+        && strOk(d, 'orgId', 100)
+        && strOk(d, 'id', 200)
+        && tsOk(d, 'createdAt')
+        && tsOk(d, 'updatedAt')
+        && tsOk(d, 'deletedAt')
+        && numOk(d, 'capacidade_ml', 1000000)
+        && numOk(d, 'preco_compra', 1000000)
+        && numOk(d, 'preco_venda', 1000000)
+        && numOk(d, 'estoque_min', 1000000)
+        && numOk(d, 'estoque_inicial', 1000000);
+    }
+
+    function arrOk(d, k)  { return !(k in d) || d[k] is list; }
+    function mapOk(d, k)  { return !(k in d) || d[k] is map; }
+    function boolOk(d, k) { return !(k in d) || d[k] is bool; }
+
+    // espinha comum (id/orgId/timestamps) — usada pelas coleções sem schema campo-a-campo ainda
+    function espinhaOk(d) {
+      return d is map
+        && strOk(d, 'id', 200) && strOk(d, 'orgId', 100)
+        && tsOk(d, 'createdAt') && tsOk(d, 'updatedAt') && tsOk(d, 'deletedAt');
+    }
+
+    function estoqueOk(d) {
+      return d is map
+        && strOk(d,'id',200) && strOk(d,'orgId',100) && strOk(d,'mes',20)
+        && strOk(d,'semana_id',200) && strOk(d,'tipo',40)
+        && tsOk(d,'data_contagem') && tsOk(d,'createdAt') && tsOk(d,'updatedAt') && tsOk(d,'deletedAt')
+        && arrOk(d,'produtos');
+    }
+    function vendaZigOk(d) {
+      return d is map
+        && strOk(d,'id',200) && strOk(d,'orgId',100) && strOk(d,'mes',20) && strOk(d,'semana_id',200)
+        && tsOk(d,'periodo_inicio') && tsOk(d,'periodo_fim')
+        && tsOk(d,'createdAt') && tsOk(d,'updatedAt') && tsOk(d,'deletedAt')
+        && arrOk(d,'itens');
+    }
+    function mapeamentoOk(d) {
+      return d is map
+        && strOk(d,'id',200) && strOk(d,'orgId',100) && strOk(d,'nome_zig',300)
+        && strOk(d,'sku_zig',100) && strOk(d,'tipo',40)
+        && strOk(d,'mixer_nome',300) && strOk(d,'mixer_produto_id',200)
+        && boolOk(d,'ativo')
+        && numOk(d,'garrafa_qtd',1000000) && numOk(d,'redbull_qtd',1000000) && numOk(d,'preco_zig',1000000)
+        && tsOk(d,'createdAt') && tsOk(d,'updatedAt')
+        && arrOk(d,'regras');
+    }
+    function semanaOk(d) {
+      return d is map
+        && strOk(d,'id',200) && strOk(d,'orgId',100) && strOk(d,'mes',20) && strOk(d,'status',40)
+        && tsOk(d,'periodo_inicio') && tsOk(d,'periodo_fim')
+        && tsOk(d,'createdAt') && tsOk(d,'updatedAt') && tsOk(d,'deletedAt');
+    }
+    function conciliacaoOk(d) {
+      return d is map
+        && strOk(d,'id',200) && strOk(d,'orgId',100) && strOk(d,'mes',20) && strOk(d,'semana_id',200)
+        && tsOk(d,'periodo_inicio') && tsOk(d,'periodo_fim') && tsOk(d,'gerado_em')
+        && tsOk(d,'createdAt') && tsOk(d,'updatedAt')
+        && numOk(d,'total_falta',1000000) && numOk(d,'total_sobra',1000000)
+        && mapOk(d,'contagem') && mapOk(d,'meta') && arrOk(d,'resultados');
+    }
+
     // ── TIER A · operacional restrito ─────────────────────────────────────────
     //    read: admin + manager   ·   create/update + delete: admin
     match /fichas/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /compras/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /eventos/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /custos/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /inventarios/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /inventarios_mensais/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /cortesias_semana/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /estornos_semana/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /conciliacoes/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && conciliacaoOk(request.resource.data);
       allow delete:         if isAdmin();
     }
 
@@ -107,22 +184,22 @@ service cloud.firestore {
     //    read: admin + manager + staff   ·   create/update: admin + manager   ·   delete: admin
     match /produtos/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
-      allow create, update: if isAdmin() || isManager();
+      allow create, update: if (isAdmin() || isManager()) && produtoOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /mapeamento_zig/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
-      allow create, update: if isAdmin() || isManager();
+      allow create, update: if (isAdmin() || isManager()) && mapeamentoOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /skus_zig/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
-      allow create, update: if isAdmin() || isManager();
+      allow create, update: if (isAdmin() || isManager()) && espinhaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /semanas_conciliacao/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
-      allow create, update: if isAdmin() || isManager();
+      allow create, update: if (isAdmin() || isManager()) && semanaOk(request.resource.data);
       allow delete:         if isAdmin();
     }
 
@@ -130,12 +207,12 @@ service cloud.firestore {
     //    read + create/update: admin + manager + staff   ·   delete: admin
     match /estoques/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
-      allow create, update: if isAdmin() || isManager() || isStaff();
+      allow create, update: if (isAdmin() || isManager() || isStaff()) && estoqueOk(request.resource.data);
       allow delete:         if isAdmin();
     }
     match /vendas_zig/{doc} {
       allow read:           if isAdmin() || isManager() || isStaff();
-      allow create, update: if isAdmin() || isManager() || isStaff();
+      allow create, update: if (isAdmin() || isManager() || isStaff()) && vendaZigOk(request.resource.data);
       allow delete:         if isAdmin();
     }
 

@@ -263,6 +263,23 @@ try {
   auth = firebase.auth();
 } catch(e){ console.warn("Firebase:",e.message); }
 
+// Trilha de auditoria — best-effort, append-only. NUNCA lança (não pode quebrar a operação real).
+async function logAudit(acao, colecao, docId){
+  try {
+    if(!db) return;
+    const u = (typeof auth !== 'undefined' && auth && auth.currentUser) ? auth.currentUser : null;
+    await db.collection('audit_log').add({
+      acao: acao,                          // 'create' | 'update' | 'delete_soft' | 'restore' | 'delete_hard'
+      colecao: colecao || null,
+      docId: docId || null,
+      uid: u ? u.uid : null,
+      userEmail: u ? (u.email || null) : null,
+      orgId: 'default',
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e){ /* best-effort: silencioso, jamais propaga */ }
+}
+
 const FS = {
   // Retornam true/false. Em caso de erro, mostram toast — nunca falham em silêncio.
   save: async (col,data) => {
@@ -270,9 +287,9 @@ const FS = {
     try {
       const ts = firebase.firestore.FieldValue.serverTimestamp();
       // Update usa merge:true para não apagar createdAt/orgId (e campos futuros) no overwrite.
-      if(data.id) await db.collection(col).doc(String(data.id)).set({...data, updatedAt:ts}, {merge:true});
+      if(data.id){ await db.collection(col).doc(String(data.id)).set({...data, updatedAt:ts}, {merge:true}); logAudit('update', col, data.id); }
       // Campos de criação (orgId/createdAt/updatedAt) via fonte única Domain.camposCriacao.
-      else { const r=await db.collection(col).add(Domain.camposCriacao(data, ts)); await r.update({id:r.id}); }
+      else { const r=await db.collection(col).add(Domain.camposCriacao(data, ts)); await r.update({id:r.id}); logAudit('create', col, r.id); }
       return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
@@ -281,26 +298,26 @@ const FS = {
     if(!db){ toast("Banco indisponível — exclusão não realizada.","err"); return false; }
     try {
       const ts = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection(col).doc(String(id)).set({deletedAt:ts, updatedAt:ts},{merge:true}); return true;
+      await db.collection(col).doc(String(id)).set({deletedAt:ts, updatedAt:ts},{merge:true}); logAudit('delete_soft', col, id); return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); return false; }
   },
   restore: async (col,id) => {
     if(!db){ toast("Banco indisponível.","err"); return false; }
     try {
       const ts = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection(col).doc(String(id)).update({deletedAt:firebase.firestore.FieldValue.delete(), updatedAt:ts}); return true;
+      await db.collection(col).doc(String(id)).update({deletedAt:firebase.firestore.FieldValue.delete(), updatedAt:ts}); logAudit('restore', col, id); return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao restaurar"); return false; }
   },
   hardDel: async (col,id) => {
     if(!db){ toast("Banco indisponível — exclusão não realizada.","err"); return false; }
-    try { await db.collection(col).doc(String(id)).delete(); return true; }
+    try { await db.collection(col).doc(String(id)).delete(); logAudit('delete_hard', col, id); return true; }
     catch(e){ toast(FS._msg(e),"err","Falha ao excluir"); return false; }
   },
   setDoc: async (col,id,d) => {
     if(!db){ toast("Banco indisponível — alteração não salva.","err"); return false; }
     try {
       const ts = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection(col).doc(id).set({...d, updatedAt:ts},{merge:true}); return true;
+      await db.collection(col).doc(id).set({...d, updatedAt:ts},{merge:true}); logAudit('update', col, id); return true;
     } catch(e){ toast(FS._msg(e),"err","Falha ao salvar"); return false; }
   },
   listen: (col,cb) => db
@@ -781,7 +798,7 @@ function listaSemFichaEfetiva(){
 function salvarSemFicha(novaLista){
   S.config = {...S.config, produtos_sem_ficha:novaLista}; // update otimista ANTES do render → tela reflete na hora
   render();
-  if(db) db.collection('config').doc('settings').set({...S.config, produtos_sem_ficha:novaLista},{merge:true});
+  if(db){ db.collection('config').doc('settings').set({...S.config, produtos_sem_ficha:novaLista},{merge:true}); logAudit('update', 'config', 'settings'); }
 }
 function addSemFicha(nome){
   if(!nome) return;
@@ -1231,7 +1248,7 @@ async function salvarCatalogo(){
           criados++;
         }
       });
-      await batch.commit();
+      await batch.commit(); logAudit('create', 'produtos', 'batch_catalogo');
     }
     catalogoImport=null;
     renderEstoque();
@@ -1690,7 +1707,7 @@ function setDatasNoMes(n){
   n = Math.max(1, Math.min(20, parseInt(n)||1));
   S.config = {...S.config, datasNoMes:n};
   render();
-  if(db) db.collection('config').doc('settings').set({...S.config, datasNoMes:n},{merge:true});
+  if(db){ db.collection('config').doc('settings').set({...S.config, datasNoMes:n},{merge:true}); logAudit('update', 'config', 'settings'); }
 }
 
 function renderCustos(){
@@ -2240,6 +2257,7 @@ async function seedCombos(){
     await fRef.update({id: fRef.id}); // write-back do id (corrige fichas inalcançáveis)
     count++;
   }
+  logAudit('create', 'fichas', 'seed_combos');
   console.log("Combos cadastrados:", count);
 }
 

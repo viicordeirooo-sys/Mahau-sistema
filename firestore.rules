@@ -216,6 +216,18 @@ service cloud.firestore {
       allow delete:         if isAdmin();
     }
 
+    // ── audit_log · trilha de auditoria (append-only, imutável) ───────────────
+    //    create: qualquer papel logado, MAS só no próprio nome (uid==auth.uid) e
+    //            com ts==request.time (não dá pra forjar autor nem data).
+    //    read:   só admin.   update/delete: NINGUÉM (nem admin) — append-only de verdade.
+    match /audit_log/{doc} {
+      allow read:   if isAdmin();
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.ts == request.time;
+      allow update, delete: if false;
+    }
+
     // ── config (singleton config/settings) ────────────────────────────────────
     //    read: admin + manager   ·   create/update + delete: admin
     match /config/{doc} {

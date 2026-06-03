@@ -26,3 +26,8 @@ roles.json
 
 # Config local do Claude Code (não depender do exclude global do git)
 .claude/
+
+# Artefatos temporários de inspeção/checagem (node --check, extrações de funções)
+.__check.js
+*.check.js
+_tmp_*.txt

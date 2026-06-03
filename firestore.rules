@@ -57,13 +57,13 @@ service cloud.firestore {
 
     // ── Validação de schema (Nível B tolerante: campos opcionais, validados quando presentes; sem hasOnly) ──
     function numOk(d, k, teto) {
-      return !(k in d) || (d[k] is number && d[k] >= 0 && d[k] <= teto);
+      return !(k in d) || d[k] == null || (d[k] is number && d[k] >= 0 && d[k] <= teto);
     }
     function strOk(d, k, maxlen) {
-      return !(k in d) || (d[k] is string && d[k].size() <= maxlen);
+      return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= maxlen);
     }
     function tsOk(d, k) {
-      return !(k in d) || d[k] is timestamp || d[k] is string;
+      return !(k in d) || d[k] == null || d[k] is timestamp || d[k] is string;
     }
     function produtoOk(d) {
       return d is map
@@ -82,9 +82,9 @@ service cloud.firestore {
         && numOk(d, 'estoque_inicial', 1000000);
     }
 
-    function arrOk(d, k)  { return !(k in d) || d[k] is list; }
-    function mapOk(d, k)  { return !(k in d) || d[k] is map; }
-    function boolOk(d, k) { return !(k in d) || d[k] is bool; }
+    function arrOk(d, k)  { return !(k in d) || d[k] == null || d[k] is list; }
+    function mapOk(d, k)  { return !(k in d) || d[k] == null || d[k] is map; }
+    function boolOk(d, k) { return !(k in d) || d[k] == null || d[k] is bool; }
 
     // espinha comum (id/orgId/timestamps) — usada pelas coleções sem schema campo-a-campo ainda
     function espinhaOk(d) {

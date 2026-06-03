@@ -1330,10 +1330,9 @@ let cpForm=null;
 
 function renderCompras(){
   const totalMes=totalComprasMes();
-  const sems=["S1","S2","S3","S4"].map(s=>({
-    s,items:S.compras.filter(c=>c.sem===s),
-    total:S.compras.filter(c=>c.sem===s).reduce((a,c)=>a+(c.total||0),0)
-  })).filter(x=>x.items.length);
+  // Listagem por mês selecionado, ordenada por data (ISO ordena cronologicamente).
+  const itens=S.compras.filter(c=>noMes(c.mes||c.data))
+    .sort((a,b)=>String(a.data||"").localeCompare(String(b.data||"")));
 
   const formHTML=cpForm!==null?`<div class="fb">
     <div class="ft">Nova Compra<button class="bi" onclick="cpForm=null;renderCompras()">✕</button></div>
@@ -1342,7 +1341,6 @@ function renderCompras(){
         <option value="">-- selecione --</option>
         ${S.produtos.sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join("")}
       </select></div>
-      <div class="fi"><label>Semana</label><select id="cp-sem">${["S1","S2","S3","S4"].map(s=>`<option>${s}</option>`).join("")}</select></div>
       <div class="fi"><label>Data</label><input id="cp-data" type="date"></div>
     </div>
     <div class="fg g3">
@@ -1371,12 +1369,12 @@ function renderCompras(){
       </div>
     </div>
     ${formHTML}
-    ${sems.length?sems.map(({s,items,total})=>`
+    ${itens.length?`
       <div class="wb">
-        <div class="wh"><span style="font-size:11px;font-weight:700;color:#8b949e">SEMANA ${s.replace("S","")}</span><span style="font-family:monospace;font-weight:700;font-size:13px">${R(total)}</span></div>
+        <div class="wh"><span style="font-size:11px;font-weight:700;color:#8b949e">${itens.length} compra${itens.length!==1?"s":""} no mês</span><span style="font-family:monospace;font-weight:700;font-size:13px">${R(totalMes)}</span></div>
         <div class="tw"><table>
           <thead><tr><th>Produto</th><th>Data</th><th class="r">Qtd</th><th class="r">Unit.</th><th class="r">Total</th><th>Fornecedor</th><th></th></tr></thead>
-          <tbody>${items.map(c=>{
+          <tbody>${itens.map(c=>{
             const p=S.produtos.find(x=>x.id===c.produto_id);
             return`<tr>
               <td class="w6">${esc(p?p.nome:c.produto_id||"—")}</td>
@@ -1389,7 +1387,7 @@ function renderCompras(){
             </tr>`;
           }).join("")}</tbody>
         </table></div>
-      </div>`).join(""):`<div class="box"><div class="empty">Nenhuma compra registrada ainda.</div></div>`}
+      </div>`:`<div class="box"><div class="empty">Nenhuma compra registrada ainda.</div></div>`}
   `);
 }
 
@@ -1412,7 +1410,7 @@ function saveCp(){
     [cu>=0, "O custo unitário não pode ser negativo."],
   ])) return;
   FS.save("compras",{
-    id:null,produto_id:pid,sem:sv("cp-sem"),
+    id:null,produto_id:pid,
     data,mes:mesDeData(data),qtd,custo_unit:cu,
     total:nv("cp-tot")||qtd*cu,forn:sv("cp-forn"),
   });
@@ -2166,10 +2164,10 @@ function exportarExcel(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws1Data),"Eventos");
 
   // Sheet 3: Compras
-  const ws3Data=[["Produto","Semana","Data","Qtd","Custo Unit","Total","Fornecedor"]];
+  const ws3Data=[["Produto","Data","Qtd","Custo Unit","Total","Fornecedor"]];
   S.compras.filter(c=>noMes(c.mes||c.data)).forEach(c=>{
     const p=S.produtos.find(x=>x.id===c.produto_id);
-    ws3Data.push([p?p.nome:c.produto_id,c.sem||"",c.data||"",c.qtd||0,c.custo_unit||0,c.total||0,c.forn||""]);
+    ws3Data.push([p?p.nome:c.produto_id,c.data||"",c.qtd||0,c.custo_unit||0,c.total||0,c.forn||""]);
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ws3Data),"Compras");
 

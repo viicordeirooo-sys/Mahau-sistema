@@ -324,7 +324,7 @@ function toast(msg, tipo="info", titulo){
   const t=document.createElement("div");
   t.className="toast"+(tipo==="err"?" err":tipo==="ok"?" ok":"");
   const ttl=titulo||(tipo==="err"?"Erro":tipo==="ok"?"Pronto":"Aviso");
-  t.innerHTML=`<div class="toast-t">${ttl}</div><div>${msg}</div>`;
+  t.innerHTML=`<div class="toast-t">${esc(ttl)}</div><div>${esc(msg)}</div>`;
   wrap.appendChild(t);
   setTimeout(()=>{ t.style.transition="opacity .3s"; t.style.opacity="0"; setTimeout(()=>t.remove(),300); }, tipo==="err"?6000:3000);
 }
@@ -591,7 +591,7 @@ function renderDash(){
 
   const alertHTML=alrs.length?`<div class="alert-strip">
     ⚠ ${alrs.length} produto${alrs.length>1?"s abaixo":" abaixo"} do estoque mínimo:
-    ${alrs.slice(0,5).map(p=>`<strong>${p.nome}</strong>`).join(", ")}${alrs.length>5?` +${alrs.length-5} mais`:""}
+    ${alrs.slice(0,5).map(p=>`<strong>${esc(p.nome)}</strong>`).join(", ")}${alrs.length>5?` +${alrs.length-5} mais`:""}
   </div>`:"";
 
   set("p-dash",`
@@ -610,7 +610,7 @@ function renderDash(){
         <thead><tr><th>Data</th><th>Evento</th><th class="r">Receita Casa</th><th class="r">Custos Dir.</th><th class="r">Resultado</th><th class="r">Margem</th></tr></thead>
         <tbody>${calcs.length?calcs.map(e=>`<tr>
           <td class="mn mt">${fmtData(e.data)}</td>
-          <td class="w6">${e.nome||""}</td>
+          <td class="w6">${esc(e.nome)}</td>
           <td class="r mn">${R(e.receitaCasa)}</td>
           <td class="r mn mt">${R(e.custosDiretos)}</td>
           <td class="r mn" style="color:${e.resultado>0?"#22c55e":"#ef4444"};font-weight:600">${R(e.resultado)}</td>
@@ -627,9 +627,9 @@ function renderDash(){
           const atual=estoqueAtual(p.id);
           return`<tr>
             <td class="w6">${esc(p.nome)}</td>
-            <td class="mt">${p.categoria||""}</td>
-            <td class="r mn tag-red">${atual.toFixed(1)} ${p.unidade||"un"}</td>
-            <td class="r mn">${p.estoque_min||0} ${p.unidade||"un"}</td>
+            <td class="mt">${esc(p.categoria)}</td>
+            <td class="r mn tag-red">${atual.toFixed(1)} ${esc(p.unidade||"un")}</td>
+            <td class="r mn">${p.estoque_min||0} ${esc(p.unidade||"un")}</td>
             <td class="r mn tag-red">${(atual-(p.estoque_min||0)).toFixed(1)}</td>
           </tr>`;
         }).join("")}
@@ -654,7 +654,7 @@ function renderProd(){
   const formHTML=prodForm!==null?`<div class="fb">
     <div class="ft">${prodForm.id?"Editar":"Novo"} Produto<button class="bi" onclick="prodForm=null;renderProd()">✕</button></div>
     <div class="fg g3">
-      <div class="fi"><label>Nome do Produto</label><input id="pf-nome" value="${prodForm.nome||""}"></div>
+      <div class="fi"><label>Nome do Produto</label><input id="pf-nome" value="${esc(prodForm.nome||"")}"></div>
       <div class="fi"><label>Categoria</label><select id="pf-cat">
         ${CATS_PROD.slice(1).map(c=>`<option${prodForm.categoria===c?" selected":""}>${c}</option>`).join("")}
       </select></div>
@@ -733,7 +733,7 @@ function renderProd(){
           const alr=(p.estoque_min||0)>0 && atual<(p.estoque_min||0);
           return`<tr>
             <td class="w6">${esc(p.nome)}</td>
-            <td class="mt">${p.categoria||""}</td>
+            <td class="mt">${esc(p.categoria)}</td>
             <td class="r mn mt">${p.capacidade_ml||"—"}ml</td>
             <td class="r mn">${p.preco_compra?Rf(p.preco_compra):"—"}</td>
             <td class="r mn">${p.preco_venda?Rf(p.preco_venda):"—"}</td>
@@ -845,7 +845,7 @@ function renderBulkEdit(){
           const dirty=Object.keys(bc).length>0;
           return`<tr style="${dirty?"background:rgba(245,158,11,.05)":""}">
             <td class="w6">${esc(p.nome)}</td>
-            <td class="mt" style="font-size:10px">${p.categoria||""}</td>
+            <td class="mt" style="font-size:10px">${esc(p.categoria)}</td>
             <td><input class="bulk-inp${dirty&&bc.preco_compra!==undefined?" bulk-dirty":""}" type="number" value="${cu}" step="0.01" placeholder="0.00"
               onchange="setBulk('${p.id}','preco_compra',parseFloat(this.value)||0);this.classList.add('bulk-dirty');updateBulkMargem('${p.id}')"></td>
             <td><input class="bulk-inp${dirty&&bc.preco_venda!==undefined?" bulk-dirty":""}" type="number" value="${vd}" step="0.01" placeholder="0.00"
@@ -963,7 +963,7 @@ function renderFichas(){
           const mg=f.preco_venda&&custo?((f.preco_venda-custo)/f.preco_venda):null;
           return`<tr>
             <td class="w6">${esc(f.nome)}</td>
-            <td class="mt">${f.categoria||""}</td>
+            <td class="mt">${esc(f.categoria)}</td>
             <td class="r mn">${f.preco_venda?Rf(f.preco_venda):"—"}</td>
             <td class="r mn">${custo?Rf(custo):"—"}</td>
             <td class="r">${mg!==null?chip(P(mg),mg>0.65?"#22c55e":mg>0.50?"#f59e0b":"#ef4444"):"—"}</td>
@@ -989,7 +989,7 @@ function renderFichaForm(){
   return`<div class="fb">
     <div class="ft">${fichaForm.id?"Editar":"Nova"} Ficha Técnica<button class="bi" onclick="fichaForm=null;renderFichas()">✕</button></div>
     <div class="fg g3">
-      <div class="fi"><label>Nome do Drink</label><input id="ff-nome" value="${fichaForm.nome||""}"></div>
+      <div class="fi"><label>Nome do Drink</label><input id="ff-nome" value="${esc(fichaForm.nome||"")}"></div>
       <div class="fi"><label>Categoria</label><select id="ff-cat">
         ${["Drinks Autorais","Gin Tônicas","Drinks Gin","Drinks Clássicos","Caipirinhas","Shots","Não Alcoólicos"].map(c=>`<option${fichaForm.categoria===c?" selected":""}>${c}</option>`).join("")}
       </select></div>
@@ -1000,7 +1000,7 @@ function renderFichaForm(){
       ${ings.map((ing,i)=>`<div class="ing-row">
         <select class="ing-sel" onchange="fichaForm.ingredientes[${i}].produto_id=this.value">
           <option value="">-- produto --</option>
-          ${S.produtos.map(p=>`<option value="${p.id}"${ing.produto_id===p.id?" selected":""}>${p.nome}</option>`).join("")}
+          ${S.produtos.map(p=>`<option value="${p.id}"${ing.produto_id===p.id?" selected":""}>${esc(p.nome)}</option>`).join("")}
         </select>
         <input class="ing-ml" type="number" placeholder="ml" value="${ing.quantidade_ml||""}" oninput="fichaForm.ingredientes[${i}].quantidade_ml=parseFloat(this.value)||0">
         <button class="bi" onclick="fichaForm.ingredientes.splice(${i},1);renderFichas()">✕</button>
@@ -1079,9 +1079,9 @@ function renderEstoque(){
           const status=alr?chip("⚠ Baixo","#ef4444"):chip("✓ OK","#22c55e");
           return`<tr>
             <td class="w6">${esc(p.nome)}</td>
-            <td class="mt">${p.categoria||""}</td>
-            <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${p.atual.toFixed(1)} ${p.unidade||"un"}</td>
-            <td class="r mn mt">${p.estoque_min||0} ${p.unidade||"un"}</td>
+            <td class="mt">${esc(p.categoria)}</td>
+            <td class="r mn" style="color:${alr?"#ef4444":"#22c55e"};font-weight:600">${p.atual.toFixed(1)} ${esc(p.unidade||"un")}</td>
+            <td class="r mn mt">${p.estoque_min||0} ${esc(p.unidade||"un")}</td>
             <td class="r">${status}</td>
             <td class="r mn">${p.preco_compra?R(p.atual*(p.preco_compra||0)):"—"}</td>
           </tr>`;
@@ -1242,9 +1242,9 @@ function renderListaCompras(){
         <thead><tr><th>Produto</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Sugestão compra</th><th class="r">Custo est.</th></tr></thead>
         <tbody>${criticos.map(p=>`<tr>
           <td class="w6">${esc(p.nome)}</td>
-          <td class="r mn inv-bad">${p.atual.toFixed(1)} ${p.unidade||"un"}</td>
-          <td class="r mn">${p.estoque_min} ${p.unidade||"un"}</td>
-          <td class="r mn" style="color:#3b82f6;font-weight:700">${p.sugestao} ${p.unidade||"un"}</td>
+          <td class="r mn inv-bad">${p.atual.toFixed(1)} ${esc(p.unidade||"un")}</td>
+          <td class="r mn">${p.estoque_min} ${esc(p.unidade||"un")}</td>
+          <td class="r mn" style="color:#3b82f6;font-weight:700">${p.sugestao} ${esc(p.unidade||"un")}</td>
           <td class="r mn">${p.preco_compra?R(p.sugestao*(p.preco_compra||0)):"—"}</td>
         </tr>`).join("")}
         <tr class="tr-tot"><td>Total estimado</td><td colspan="3"></td><td class="r mn">${R(totalEst)}</td></tr>
@@ -1253,7 +1253,7 @@ function renderListaCompras(){
       }
       ${atentos.length?`
       <div class="section-divider" style="margin-top:14px">⚡ ATENÇÃO — próximo do mínimo (${atentos.length} produtos)</div>
-      <div style="font-size:11px;color:#f59e0b">${atentos.map(p=>`${p.nome} (${p.atual.toFixed(1)}/${p.estoque_min})`).join("  ·  ")}</div>`:""
+      <div style="font-size:11px;color:#f59e0b">${atentos.map(p=>`${esc(p.nome)} (${p.atual.toFixed(1)}/${p.estoque_min})`).join("  ·  ")}</div>`:""
       }
       ${!criticos.length&&!atentos.length?`<div class="empty" style="padding:20px">✓ Estoque OK em todos os produtos com mínimo definido</div>`:""
       }
@@ -1280,7 +1280,7 @@ function renderCompras(){
     <div class="fg g3">
       <div class="fi"><label>Produto</label><select id="cp-prod">
         <option value="">-- selecione --</option>
-        ${S.produtos.sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}">${p.nome}</option>`).join("")}
+        ${S.produtos.sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}">${esc(p.nome)}</option>`).join("")}
       </select></div>
       <div class="fi"><label>Semana</label><select id="cp-sem">${["S1","S2","S3","S4"].map(s=>`<option>${s}</option>`).join("")}</select></div>
       <div class="fi"><label>Data</label><input id="cp-data" type="date"></div>
@@ -1319,12 +1319,12 @@ function renderCompras(){
           <tbody>${items.map(c=>{
             const p=S.produtos.find(x=>x.id===c.produto_id);
             return`<tr>
-              <td class="w6">${p?p.nome:c.produto_id||"—"}</td>
+              <td class="w6">${esc(p?p.nome:c.produto_id||"—")}</td>
               <td class="mn mt">${fmtData(c.data)}</td>
               <td class="r mn">${c.qtd||0}</td>
               <td class="r mn mt">${c.custo_unit?Rf(c.custo_unit):"—"}</td>
               <td class="r mn w6">${R(c.total)}</td>
-              <td class="mt">${c.forn||""}</td>
+              <td class="mt">${esc(c.forn)}</td>
               <td><button class="bi" onclick="softDel('compras','${c.id}')">✕</button></td>
             </tr>`;
           }).join("")}</tbody>
@@ -1372,7 +1372,7 @@ function renderEventos(){
     <div class="ft">${evForm.id?"Editar":"Novo"} Evento<button class="bi" onclick="evForm=null;renderEventos()">✕</button></div>
     <div class="fg g4">
       <div class="fi"><label>Data</label><input id="ef-data" type="date" value="${evForm.data||""}"></div>
-      <div class="fi"><label>Nome</label><input id="ef-nome" value="${evForm.nome||""}"></div>
+      <div class="fi"><label>Nome</label><input id="ef-nome" value="${esc(evForm.nome||"")}"></div>
       <div class="fi"><label>Público</label><input id="ef-pub" type="number" value="${evForm.publico||""}"></div>
       <div class="fi"><label>VIPs</label><input id="ef-vips" type="number" value="${evForm.vips||""}"></div>
     </div>
@@ -1401,7 +1401,7 @@ function renderEventos(){
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
           <div style="font-size:10px;color:#484f58">${fmtData(e.data)}</div>
-          <div style="font-weight:700;font-size:14px">${e.nome||""}</div>
+          <div style="font-weight:700;font-size:14px">${esc(e.nome)}</div>
           <div style="font-size:10px;color:#484f58;margin-top:2px">${e.publico||0} pessoas · ${e.vips||0} VIPs</div>
         </div>
         <div style="text-align:right">
@@ -1453,7 +1453,7 @@ function renderDRE(e){
     {l:"Resultado da Noite",v:c.resultado,bold:true,big:true,c:c.resultado>0?"#22c55e":"#ef4444"},
   ];
   return`<div class="dre-box">
-    <div style="font-size:10px;color:#3b82f6;font-weight:600;margin-bottom:4px">DRE da Noite — ${e.nome||""}</div>
+    <div style="font-size:10px;color:#3b82f6;font-weight:600;margin-bottom:4px">DRE da Noite — ${esc(e.nome)}</div>
     ${rows.map(r=>r.sep?`<div class="dre-sep"></div>`:`
       <div class="dre-r${r.bold?" bold":""}">
         <span style="font-size:${r.big?12:10}px;color:${r.c||"#8b949e"};padding-left:${r.sub?12:0}px;font-weight:${r.bold?700:400}">${r.l}</span>
@@ -1473,7 +1473,7 @@ function importVendidosHTML(ev){
   const imp=(prodVendidosImport && prodVendidosImport.evento_id===ev.id)?prodVendidosImport:null;
   const jaImportado=!!ev.zig_importado_em;
   let html=`<div class="fb">
-    <div class="ft">📥 Importar produtos vendidos da Zig — ${ev.nome||""} · ${fmtData(ev.data)}</div>
+    <div class="ft">📥 Importar produtos vendidos da Zig — ${esc(ev.nome)} · ${fmtData(ev.data)}</div>
     <div style="font-size:11px;color:#484f58;margin-bottom:10px">XLSX <strong>"total-produtos-vendidos"</strong> da Zig (do dia do evento). Só <strong>baixa o estoque</strong> via mapeamento — não mexe em faturamento/porta/caixinha. Nos combos, a garrafa e os mixers reais vêm da aba <em>Montáveis</em>.</div>
     <input type="file" id="ev-zig-file" accept=".xlsx,.xls" onchange="importProdVendidosFile(this)" style="background:#1c2332;border:1px solid #2d333b;border-radius:5px;padding:9px 10px;color:#e6edf3;font-size:12px;width:100%">
     ${jaImportado?`<div class="alert-strip" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);color:#22c55e;margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -1780,8 +1780,8 @@ function renderInventario(){
           const dc=desvio===null?"":desvio>0.5?"inv-ok":desvio<-0.5?"inv-bad":"inv-warn";
           return`<tr>
             <td class="w6">${esc(p.nome)}</td>
-            <td class="mt" style="font-size:10px">${p.categoria||""}</td>
-            <td class="r mn">${teo.toFixed(2)} ${p.unidade||"un"}</td>
+            <td class="mt" style="font-size:10px">${esc(p.categoria)}</td>
+            <td class="r mn">${teo.toFixed(2)} ${esc(p.unidade||"un")}</td>
             <td><input class="bulk-inp" type="number" step="0.5" placeholder="—" value="${fis}"
               oninput="invContagens['${key}']=this.value===''?undefined:parseFloat(this.value);updateInvRow(this,'${key}',${teo},${p.preco_compra||0})"
               style="width:80px"></td>
@@ -1877,7 +1877,7 @@ function renderInventarioMensal(pills){
           const valorLinha = fis!==""&&fis!==undefined ? (parseFloat(fis)||0)*(p.preco_compra||0) : null;
           return `<tr>
             <td class="w6">${esc(p.nome)}</td>
-            <td class="mt" style="font-size:10px">${p.categoria||""}</td>
+            <td class="mt" style="font-size:10px">${esc(p.categoria)}</td>
             <td class="r mn mt">${salvo!==null?salvo:"—"}</td>
             <td class="r mn mt">${Rf(p.preco_compra||0)}</td>
             <td><input class="bulk-inp" type="number" step="0.5" placeholder="${salvo!==null?salvo:"—"}" value="${fis}"
@@ -2073,7 +2073,7 @@ function renderFechamento(){
         <thead><tr><th>Data</th><th>Evento</th><th class="r">Receita Casa</th><th class="r">Custos Dir.</th><th class="r">Resultado</th><th class="r">Margem</th></tr></thead>
         <tbody>${calcs.length?calcs.map(e=>`<tr>
           <td class="mn mt">${fmtData(e.data)}</td>
-          <td class="w6">${e.nome||""}</td>
+          <td class="w6">${esc(e.nome)}</td>
           <td class="r mn">${R(e.receitaCasa)}</td>
           <td class="r mn mt">${R(e.custosDiretos)}</td>
           <td class="r mn" style="color:${e.resultado>0?"#22c55e":"#ef4444"};font-weight:700">${R(e.resultado)}</td>
@@ -2268,7 +2268,7 @@ function renderLixeira(){
     const desc=descreveDoc(col,d);
     const restore=`restaurarDoc('${col}','${d.id}')`, hard=`confirmarLimpar(()=>FS.hardDel('${col}','${d.id}'))`;
     return `<tr>
-      <td class="w6">${desc}</td>
+      <td class="w6">${esc(desc)}</td>
       <td class="r" style="white-space:nowrap">
         <button class="btn bg_ bsm" onclick="${restore}">↩ Restaurar</button>
         <button class="btn bd_ bsm" onclick="${hard}">Excluir definitivamente</button>
@@ -2850,7 +2850,7 @@ function resumoMapa(m){
 function mapaFormHTML(){
   const f=mapaForm; if(f===null) return "";
   const prods=S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome));
-  const optProd=sel=>`<option value="">-- selecione --</option>`+prods.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${p.nome}</option>`).join("");
+  const optProd=sel=>`<option value="">-- selecione --</option>`+prods.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${esc(p.nome)}</option>`).join("");
   return `<div class="fb">
     <div class="ft">${f.id?"Editar":"Novo"} Mapeamento<button class="bi" onclick="mapaForm=null;rerenderMapa()">✕</button></div>
     <div class="fg g3">
@@ -2874,7 +2874,7 @@ function mapaFormHTML(){
     ${f.tipo==="combo"?`<div class="fg g3">
       <div class="fi"><label>Produto mixer (Red Bull/tônica)</label><select id="mp-mixer">
         <option value="">-- nenhum --</option>
-        ${S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}"${f.mixer_produto_id===p.id?" selected":""}>${p.nome}</option>`).join("")}
+        ${S.produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p=>`<option value="${p.id}"${f.mixer_produto_id===p.id?" selected":""}>${esc(p.nome)}</option>`).join("")}
       </select></div>
       <div class="fi"><label>Mixer por combo (qtd)</label><input id="mp-redbull" type="number" step="any" value="${f.redbull_qtd||""}"></div>
       <div class="fi"><label>Garrafas por combo <span style="color:#484f58">(informativo)</span></label><input id="mp-garrafa" type="number" step="any" value="${f.garrafa_qtd||""}"></div>
@@ -3229,7 +3229,7 @@ function showAuthError(msg){
 function showApp(user){
   el("login-screen")?.classList.add("hidden");
   const box=el("sb-auth");
-  if(box) box.innerHTML=`<span class="sb-auth-email" title="${user.email||""}">${user.email||"Logado"}</span>
+  if(box) box.innerHTML=`<span class="sb-auth-email" title="${esc(user.email||"")}">${esc(user.email||"Logado")}</span>
     <button class="sb-logout" onclick="doLogout()">Sair</button>`;
   render();
 }

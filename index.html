@@ -1807,6 +1807,7 @@ function renderCMV(){
 let invSem="S1",invData="",invSaving=false,invContagens={};
 let invModo="semanal", invMensalContagens={};
 let invMensalQ="", invMensalCat="Todos";
+let invSemQ="", invSemCat="Todos";
 
 function renderInventario(){
   const pills=`<div class="pills" style="margin-bottom:12px">
@@ -1817,9 +1818,6 @@ function renderInventario(){
   const semOpts=["S1","S2","S3","S4"];
   const historico=S.inventarios.filter(i=>!S.mesSel||i.mes===S.mesSel)
     .sort((a,b)=>(b.mes||"").localeCompare(a.mes||"")||(b.data||"").localeCompare(a.data||""));
-
-  let rows=S.produtos.filter(p=>p.preco_compra>0)
-    .sort((a,b)=>a.categoria.localeCompare(b.categoria)||a.nome.localeCompare(b.nome));
 
   set("p-inv", pills+`
     <div class="pg-h">
@@ -1838,36 +1836,14 @@ function renderInventario(){
       </div>
       <div style="font-size:11px;color:#484f58;margin-bottom:10px">
         Contagem física (un). <strong>Teórico</strong> = última contagem + compras desde então; <strong>Desvio</strong> = Físico − Teórico (consumo + quebras/furtos).
-        <span style="float:right">Produtos com custo (${rows.length})</span>
       </div>
-      <div class="tw"><table>
-        <thead><tr>
-          <th>Produto</th><th>Cat.</th>
-          <th class="r">Teórico</th>
-          <th class="r">Físico</th>
-          <th class="r">Desvio</th>
-          <th class="r">R$ Desvio</th>
-        </tr></thead>
-        <tbody>${rows.map(p=>{
-          const teo=estoqueAtual(p.id);
-          const key=p.id;
-          const fis=invContagens[key]!==undefined?invContagens[key]:"";
-          const desvio=fis!==""?parseFloat(fis)-teo:null;
-          const dVal=desvio!==null?desvio*(p.preco_compra||0):null;
-          const dc=desvio===null?"":desvio>0.5?"inv-ok":desvio<-0.5?"inv-bad":"inv-warn";
-          return`<tr>
-            <td class="w6">${esc(p.nome)}</td>
-            <td class="mt" style="font-size:10px">${esc(p.categoria)}</td>
-            <td class="r mn">${teo.toFixed(2)} ${esc(p.unidade||"un")}</td>
-            <td><input class="bulk-inp" type="number" step="0.5" placeholder="—" value="${fis}"
-              oninput="invContagens['${key}']=this.value===''?undefined:parseFloat(this.value);updateInvRow(this,'${key}',${teo},${p.preco_compra||0})"
-              style="width:80px"></td>
-            <td class="r mn ${dc}" id="inv-dev-${key}">${desvio!==null?desvio.toFixed(2)+" "+(p.unidade||"un"):"—"}</td>
-            <td class="r mn ${dc}" id="inv-val-${key}">${dVal!==null?Rf(dVal):"—"}</td>
-          </tr>`;
-        }).join("")}
-        </tbody>
-      </table></div>
+      <div class="flt">
+        <div class="sw"><span class="si">🔍</span><input id="q-invs" class="si-inp" placeholder="Buscar produto..." value="${esc(invSemQ)}" oninput="invSemQ=this.value;paintInvSemanalList()"></div>
+      </div>
+      <div class="pills">
+        ${CATS_PROD.map(c=>`<button class="pill${invSemCat===c?" on":""}" onclick="invSemCat='${c}';renderInventario()">${c}</button>`).join("")}
+      </div>
+      <div id="invs-list"></div>
     </div>
 
     ${historico.length?`<div class="box">
@@ -1888,6 +1864,49 @@ function renderInventario(){
       </table></div>
     </div>`:""
     }
+  `);
+  paintInvSemanalList();
+}
+
+// Lista de produtos do inventário semanal — pintada à parte (busca não re-renderiza a tela,
+// preservando foco do campo e as contagens digitadas, que vivem em invContagens).
+// Espelho de paintInvMensalList, com Teórico (estoqueAtual) e Desvio próprios da semanal.
+function paintInvSemanalList(){
+  const rows = S.produtos.filter(p=>{
+    if(p.preco_compra<=0) return false;
+    if(invSemCat!=="Todos" && p.categoria!==invSemCat) return false;
+    if(invSemQ && !p.nome.toLowerCase().includes(invSemQ.toLowerCase())) return false;
+    return true;
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+  set("invs-list",`
+    <div class="bh"><span class="bt">${rows.length} produto${rows.length!==1?"s":""}</span></div>
+    <div class="tw"><table>
+      <thead><tr>
+        <th>Produto</th><th>Cat.</th>
+        <th class="r">Teórico</th>
+        <th class="r">Físico</th>
+        <th class="r">Desvio</th>
+        <th class="r">R$ Desvio</th>
+      </tr></thead>
+      <tbody>${rows.map(p=>{
+        const teo=estoqueAtual(p.id);
+        const key=p.id;
+        const fis=invContagens[key]!==undefined?invContagens[key]:"";
+        const desvio=fis!==""?parseFloat(fis)-teo:null;
+        const dVal=desvio!==null?desvio*(p.preco_compra||0):null;
+        const dc=desvio===null?"":desvio>0.5?"inv-ok":desvio<-0.5?"inv-bad":"inv-warn";
+        return`<tr>
+          <td class="w6">${esc(p.nome)}</td>
+          <td class="mt" style="font-size:10px">${esc(p.categoria)}</td>
+          <td class="r mn">${teo.toFixed(2)} ${esc(p.unidade||"un")}</td>
+          <td><input class="bulk-inp" type="number" step="0.5" placeholder="—" value="${fis}"
+            oninput="invContagens['${key}']=this.value===''?undefined:parseFloat(this.value);updateInvRow(this,'${key}',${teo},${p.preco_compra||0})"
+            style="width:80px"></td>
+          <td class="r mn ${dc}" id="inv-dev-${key}">${desvio!==null?desvio.toFixed(2)+" "+(p.unidade||"un"):"—"}</td>
+          <td class="r mn ${dc}" id="inv-val-${key}">${dVal!==null?Rf(dVal):"—"}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>
   `);
 }
 

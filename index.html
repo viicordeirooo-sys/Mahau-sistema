@@ -1875,7 +1875,7 @@ function renderInventario(){
         <thead><tr><th>Data</th><th>Semana</th><th class="r">Itens contados</th><th class="r">Valor contado R$</th></tr></thead>
         <tbody>${historico.map(inv=>{
           const n=Object.keys(inv.contagens||{}).length;
-          const val=Domain.valorInventario(inv.contagens, S.produtos);
+          const val=Domain.valorInventario(inv.contagens, S.produtos, inv.custos);
           return`<tr>
             <td class="mn">${fmtData(inv.data)}</td>
             <td>${inv.semana||""}</td>
@@ -1902,6 +1902,17 @@ function updateInvRow(input,pid,teo,custo){
   valEl.textContent=Rf(dv);valEl.className="r mn "+cls;
 }
 
+// Foto do custo no momento da contagem: {produto_id: preco_compra atual de S.produtos},
+// espelhando exatamente as chaves de contagens (produto sem preço ou fora do catálogo → 0).
+function custosDaContagem(contagens){
+  const custos={};
+  Object.keys(contagens).forEach(pid=>{
+    const p=S.produtos.find(x=>x.id===pid);
+    custos[pid]=(p&&p.preco_compra)||0;
+  });
+  return custos;
+}
+
 async function salvarInventario(){
   const data=el("inv-data")?.value||new Date().toISOString().slice(0,10);
   const contagens={};
@@ -1917,7 +1928,7 @@ async function salvarInventario(){
   const contagensFinais = existente ? {...existente.contagens, ...contagens} : contagens;
   const ok=await FS.save("inventarios",{
     id: existente ? existente.id : null,
-    mes, semana:invSem, data, contagens:contagensFinais
+    mes, semana:invSem, data, contagens:contagensFinais, custos:custosDaContagem(contagensFinais)
   });
   if(!ok) return;
   invContagens={};
@@ -1931,7 +1942,7 @@ async function salvarInventario(){
 function renderInventarioMensal(pills){
   const mesAlvo = S.mesSel || new Date().toISOString().slice(0,7);
   const existente = S.inventarios_mensais.find(i=>i.mes===mesAlvo);
-  const valorSalvo = existente ? Domain.valorInventario(existente.contagens, S.produtos) : 0;
+  const valorSalvo = existente ? Domain.valorInventario(existente.contagens, S.produtos, existente.custos) : 0;
   const rows = S.produtos.filter(p=>p.preco_compra>0)
     .sort((a,b)=>(a.categoria||"").localeCompare(b.categoria||"")||a.nome.localeCompare(b.nome));
   const historico = S.inventarios_mensais.slice().sort((a,b)=>(b.mes||"").localeCompare(a.mes||""));
@@ -1975,7 +1986,7 @@ function renderInventarioMensal(pills){
         <tbody>${historico.map(inv=>`<tr>
           <td>${fmtMes(inv.mes||"")||inv.data||""}</td>
           <td class="r">${Object.keys(inv.contagens||{}).length}</td>
-          <td class="r mn">${R(Domain.valorInventario(inv.contagens,S.produtos))}</td>
+          <td class="r mn">${R(Domain.valorInventario(inv.contagens,S.produtos,inv.custos))}</td>
         </tr>`).join("")}</tbody>
       </table></div>
     </div>`:""}
@@ -1999,7 +2010,8 @@ async function salvarInventarioMensal(){
   const existente = S.inventarios_mensais.find(i=>i.mes===mes);
   const contagens = existente ? {...existente.contagens, ...novas} : novas;
   const ok = await FS.save("inventarios_mensais", {
-    id: existente?existente.id:null, mes, data:new Date().toISOString().slice(0,10), contagens
+    id: existente?existente.id:null, mes, data:new Date().toISOString().slice(0,10), contagens,
+    custos: custosDaContagem(contagens)
   });
   if(!ok) return;
   invMensalContagens={};
@@ -2022,8 +2034,8 @@ function cmvRealMensal(){
   const invFinal=S.inventarios_mensais.find(i=>i.mes===mes);
   const invInicial=S.inventarios_mensais.find(i=>i.mes===mesPrev);
   const compras=totalComprasMes();
-  const detFinal=invFinal?Domain.valorInventarioDetalhado(invFinal.contagens,S.produtos):null;
-  const detInicial=invInicial?Domain.valorInventarioDetalhado(invInicial.contagens,S.produtos):null;
+  const detFinal=invFinal?Domain.valorInventarioDetalhado(invFinal.contagens,S.produtos,invFinal.custos):null;
+  const detInicial=invInicial?Domain.valorInventarioDetalhado(invInicial.contagens,S.produtos,invInicial.custos):null;
   const final$=detFinal?detFinal.valor:null;
   const inicial$=detInicial?detInicial.valor:null;
   const cmv=(invFinal&&invInicial)?(inicial$+compras-final$):null;

@@ -37,7 +37,9 @@ const Domain = {
 
   // Valor (R$) de uma contagem física + diagnóstico de órfãos.
   //  orfaos: produto_id na contagem mas inexistente em `produtos` (deletado) — entra como R$0.
-  valorInventarioDetalhado(contagens, produtos){
+  //  custos (opcional): foto {produto_id: preco_compra} congelada no save do inventário —
+  //  quando presente para o pid, vale sobre o preco_compra atual; órfão segue R$0 (diagnóstico).
+  valorInventarioDetalhado(contagens, produtos, custos){
     if(!contagens) return {valor:0, orfaos:[]};
     const prodById={}; (produtos||[]).forEach(p=>{ if(p&&p.id) prodById[p.id]=p; });
     const orfaos={};
@@ -45,13 +47,15 @@ const Domain = {
     Object.entries(contagens).forEach(([pid,qtd])=>{
       const p=prodById[pid];
       if(!p){ if(pid) orfaos[pid]={produto_id:pid}; return; }
-      v += (parseFloat(qtd)||0)*(p.preco_compra||0);
+      const custoCongelado = custos && custos[pid]!==undefined ? custos[pid] : null;
+      const custoUsado = custoCongelado!==null ? custoCongelado : (p.preco_compra||0);
+      v += (parseFloat(qtd)||0)*(custoUsado||0);
     });
     return {valor:v, orfaos:Object.values(orfaos)};
   },
 
   // Delegate: mantém o retorno NUMÉRICO de antes.
-  valorInventario(contagens, produtos){ return Domain.valorInventarioDetalhado(contagens, produtos).valor; },
+  valorInventario(contagens, produtos, custos){ return Domain.valorInventarioDetalhado(contagens, produtos, custos).valor; },
 
   // Mês anterior: "2026-05" → "2026-04"; "2026-01" → "2025-12". Não-"YYYY-MM" → "".
   mesAnterior(ym){

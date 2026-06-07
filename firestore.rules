@@ -156,12 +156,16 @@ service cloud.firestore {
     }
     match /inventarios/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data)
+                            && mapOk(request.resource.data,'contagens')
+                            && mapOk(request.resource.data,'custos');
       allow delete:         if isAdmin();
     }
     match /inventarios_mensais/{doc} {
       allow read:           if isAdmin() || isManager();
-      allow create, update: if isAdmin() && espinhaOk(request.resource.data);
+      allow create, update: if isAdmin() && espinhaOk(request.resource.data)
+                            && mapOk(request.resource.data,'contagens')
+                            && mapOk(request.resource.data,'custos');
       allow delete:         if isAdmin();
     }
     match /cortesias_semana/{doc} {

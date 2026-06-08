@@ -1870,12 +1870,12 @@ function renderInventario(){
         <tbody>${historico.map(inv=>{
           const n=Object.keys(inv.contagens||{}).length;
           const val=Domain.valorInventario(inv.contagens, S.produtos, inv.custos);
-          return`<tr>
-            <td class="mn">${fmtData(inv.data)}</td>
+          return`<tr style="cursor:pointer" onclick="toggleHist('hist-det-semanal-${inv.id}',this)">
+            <td class="mn"><span class="hist-arrow">▸</span> ${fmtData(inv.data)}</td>
             <td>${inv.semana||""}</td>
             <td class="r">${n}</td>
             <td class="r mn">${R(val)}</td>
-          </tr>`;
+          </tr>${histDetalheRow(inv,4,'semanal')}`;
         }).join("")}
         </tbody>
       </table></div>
@@ -1925,6 +1925,42 @@ function paintInvSemanalList(){
       }).join("")}</tbody>
     </table></div>
   `);
+}
+
+// Histórico de contagens clicável: alterna a visibilidade da linha de detalhe (DOM puro,
+// sem re-render — não toca nas contagens digitadas acima). Troca a setinha ▸/▾.
+function toggleHist(detId, rowEl){
+  const det=document.getElementById(detId);
+  if(!det) return;
+  const hidden=det.classList.toggle("hidden");   // true = ficou escondido
+  const arrow=rowEl&&rowEl.querySelector(".hist-arrow");
+  if(arrow) arrow.textContent = hidden ? "▸" : "▾";
+}
+
+// <tr> de detalhe (pré-renderizado escondido) com os produtos contados de um inventário.
+// Nome via S.produtos.find (fallback pid); valor com a MESMA lógica de valorInventarioDetalhado:
+// órfão (produto removido) → R$0 + rótulo, senão custo congelado, senão preço atual. Ordena A-Z.
+function histDetalheRow(inv, colspan, prefix){
+  const linhas=Object.keys(inv.contagens||{}).map(pid=>{
+    const p=S.produtos.find(x=>x.id===pid);
+    const qtd=parseFloat(inv.contagens[pid])||0;
+    const congelado = inv.custos && inv.custos[pid]!==undefined ? inv.custos[pid] : null;
+    const custo = p ? (congelado!==null ? congelado : (p.preco_compra||0)) : 0;
+    return { nome:(p&&p.nome)||pid, orfao:!p, qtd, valor:qtd*custo };
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+  return `<tr id="hist-det-${prefix}-${inv.id}" class="hidden">
+    <td colspan="${colspan}" style="background:#0d1117;padding:0 0 8px">
+      <div class="tw"><table>
+        <thead><tr><th>Produto</th><th class="r">Qtd</th><th class="r">Valor R$</th></tr></thead>
+        <tbody>${linhas.length?linhas.map(l=>`<tr>
+          <td class="${l.orfao?'mt':''}">${esc(l.nome)}${l.orfao?' (removido)':''}</td>
+          <td class="r mn">${l.qtd}</td>
+          <td class="r mn">${Rf(l.valor)}</td>
+        </tr>`).join(""):"<tr><td colspan='3' class='empty'>Sem produtos.</td></tr>"}
+        </tbody>
+      </table></div>
+    </td>
+  </tr>`;
 }
 
 function updateInvRow(input,pid,teo,custo){
@@ -2006,11 +2042,11 @@ function renderInventarioMensal(pills){
       <div class="bh"><span class="bt">Histórico de Contagens Mensais</span></div>
       <div class="tw"><table>
         <thead><tr><th>Mês</th><th class="r">Itens</th><th class="r">Valor do estoque</th></tr></thead>
-        <tbody>${historico.map(inv=>`<tr>
-          <td>${fmtMes(inv.mes||"")||inv.data||""}</td>
+        <tbody>${historico.map(inv=>`<tr style="cursor:pointer" onclick="toggleHist('hist-det-mensal-${inv.id}',this)">
+          <td><span class="hist-arrow">▸</span> ${fmtMes(inv.mes||"")||inv.data||""}</td>
           <td class="r">${Object.keys(inv.contagens||{}).length}</td>
           <td class="r mn">${R(Domain.valorInventario(inv.contagens,S.produtos,inv.custos))}</td>
-        </tr>`).join("")}</tbody>
+        </tr>${histDetalheRow(inv,3,'mensal')}`).join("")}</tbody>
       </table></div>
     </div>`:""}
   `);

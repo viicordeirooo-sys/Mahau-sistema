@@ -617,6 +617,8 @@ function kpi(title,value,sub,color,accent){
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
+let dashAlertaQ="";
+
 function renderDash(){
   const calcs=S.eventos.filter(e=>noMes(e.mes||e.data)).map(e=>({...e,...calcEv(e)}));
   const tRec=calcs.reduce((s,e)=>s+e.receitaCasa,0);
@@ -656,21 +658,36 @@ function renderDash(){
     </div>
     ${alrs.length?`<div class="box">
       <div class="bh"><span class="bt">⚠ Estoque Abaixo do Mínimo</span></div>
-      <div class="tw"><table>
-        <thead><tr><th>Produto</th><th>Categoria</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Diferença</th></tr></thead>
-        <tbody>${alrs.map(p=>{
-          const atual=estoqueAtual(p.id);
-          return`<tr>
-            <td class="w6">${esc(p.nome)}</td>
-            <td class="mt">${esc(p.categoria)}</td>
-            <td class="r mn tag-red">${atual.toFixed(1)} ${esc(p.unidade||"un")}</td>
-            <td class="r mn">${p.estoque_min||0} ${esc(p.unidade||"un")}</td>
-            <td class="r mn tag-red">${(atual-(p.estoque_min||0)).toFixed(1)}</td>
-          </tr>`;
-        }).join("")}
-        </tbody>
-      </table></div>
+      <div class="flt">
+        <div class="sw"><span class="si">🔍</span><input id="q-dash-alerta" class="si-inp" placeholder="Buscar produto..." value="${esc(dashAlertaQ)}" oninput="dashAlertaQ=this.value;paintDashAlertaList()"></div>
+      </div>
+      <div id="dash-alerta-list"></div>
     </div>`:""}
+  `);
+  paintDashAlertaList();
+}
+
+// Lista de alertas do Dashboard — pintada à parte (busca não re-renderiza a tela).
+// Sem categoria; ordena por MAIOR FALTA no topo (diferença atual−mínimo crescente).
+// atual computado uma vez (sort + render). alertasEstoque() permanece intacto.
+function paintDashAlertaList(){
+  if(!document.getElementById("dash-alerta-list")) return; // sem alertas, a caixa nem existe
+  const rows=alertasEstoque()
+    .map(p=>({...p, atual:estoqueAtual(p.id)}))
+    .filter(p=> !dashAlertaQ || p.nome.toLowerCase().includes(dashAlertaQ.toLowerCase()))
+    .sort((a,b)=>(a.atual-(a.estoque_min||0))-(b.atual-(b.estoque_min||0)));
+  set("dash-alerta-list",`
+    <div class="tw"><table>
+      <thead><tr><th>Produto</th><th>Categoria</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Diferença</th></tr></thead>
+      <tbody>${rows.length?rows.map(p=>`<tr>
+        <td class="w6">${esc(p.nome)}</td>
+        <td class="mt">${esc(p.categoria)}</td>
+        <td class="r mn tag-red">${p.atual.toFixed(1)} ${esc(p.unidade||"un")}</td>
+        <td class="r mn">${p.estoque_min||0} ${esc(p.unidade||"un")}</td>
+        <td class="r mn tag-red">${(p.atual-(p.estoque_min||0)).toFixed(1)}</td>
+      </tr>`).join(""):"<tr><td colspan='5' class='empty'>Nenhum produto corresponde à busca.</td></tr>"}
+      </tbody>
+    </table></div>
   `);
 }
 

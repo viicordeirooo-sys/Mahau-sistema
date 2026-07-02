@@ -1116,12 +1116,12 @@ function renderEstoque(){
     return true;
   }).map(p=>({...p,atual:estoqueAtual(p.id)}))
     .sort((a,b)=>{
-      const aa=a.atual<=(a.estoque_min||0)?0:1;
-      const bb=b.atual<=(b.estoque_min||0)?0:1;
+      const aa=a.atual<(a.estoque_min||0)?0:1;
+      const bb=b.atual<(b.estoque_min||0)?0:1;
       return aa-bb||a.nome.localeCompare(b.nome);
     });
 
-  const alrs=rows.filter(p=>p.atual<=(p.estoque_min||0));
+  const alrs=rows.filter(p=>p.atual<(p.estoque_min||0));
   const ok=rows.filter(p=>p.atual>(p.estoque_min||0));
   const totalValor=rows.reduce((s,p)=>s+p.atual*(p.preco_compra||0),0);
   const compMes=totalComprasMes();
@@ -1163,8 +1163,8 @@ function paintEstList(){
     return true;
   }).map(p=>({...p,atual:estoqueAtual(p.id)}))
     .sort((a,b)=>{
-      const aa=a.atual<=(a.estoque_min||0)?0:1;
-      const bb=b.atual<=(b.estoque_min||0)?0:1;
+      const aa=a.atual<(a.estoque_min||0)?0:1;
+      const bb=b.atual<(b.estoque_min||0)?0:1;
       return aa-bb||a.nome.localeCompare(b.nome);
     });
   set("p-est-list",`
@@ -1173,7 +1173,7 @@ function paintEstList(){
       <div class="tw"><table>
         <thead><tr><th>Produto</th><th>Cat.</th><th class="r">Atual</th><th class="r">Mínimo</th><th class="r">Status</th><th class="r">Valor</th></tr></thead>
         <tbody>${rows.map(p=>{
-          const alr=p.atual<=(p.estoque_min||0);
+          const alr=p.atual<(p.estoque_min||0);
           const status=alr?chip("⚠ Baixo","#ef4444"):chip("✓ OK","#22c55e");
           return`<tr>
             <td class="w6">${esc(p.nome)}</td>
